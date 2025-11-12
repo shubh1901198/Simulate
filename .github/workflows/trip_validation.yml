@@ -13,7 +13,7 @@ jobs:
     # Set up AWS credentials for the job
     env:
       AWS_REGION: ${{ secrets.AWS_REGION }}
-      AWS_BUCKET_NAME: 'your-trip-logs-bucket' # Replace with your actual S3 bucket name
+      AWS_BUCKET_NAME: 'githubactionrunnerlogs' # Replace with your actual S3 bucket name
 
     steps:
       - name: ⬇️ Checkout Repository Code
