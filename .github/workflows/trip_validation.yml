@@ -57,3 +57,8 @@ jobs:
           name: trip-comparison-log-github
           path: trip_comparison.log
           retention-days: 7
+      - name: ✅ Check and Report Status
+        run: |
+              echo "--- Comparison Results ---"
+              cat trip_comparison.log  # <--- This command prints the file content
+              echo "--------------------------"
