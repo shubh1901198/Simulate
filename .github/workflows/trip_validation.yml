@@ -34,8 +34,6 @@ jobs:
       - name: ⚖️ Run Trip Comparison
         run: python compare_trips.py
 
-      ---
-
       - name: 🔑 Configure AWS Credentials
         # This action securely configures the AWS credentials from GitHub secrets
         uses: aws-actions/configure-aws-credentials@v4
@@ -51,8 +49,6 @@ jobs:
           S3_KEY="logs/${{ github.sha }}/trip_comparison.log"
           echo "Uploading trip_comparison.log to s3://${{ env.AWS_BUCKET_NAME }}/$S3_KEY"
           aws s3 cp trip_comparison.log s3://${{ env.AWS_BUCKET_NAME }}/$S3_KEY
-          
-      ---
       
       - name: 📄 [Optional] Upload as GitHub Artifact
         # Keep this step if you still want a temporary, quick-access copy on the GitHub run page
