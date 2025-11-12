@@ -28,8 +28,6 @@ jobs:
         # Boto3 is the AWS SDK for Python, needed for S3 operations
         run: pip install pandas boto3
 
-      ---
-
       - name: 🏃 Run Trip A Simulation
         run: python src/simulate_trip_a.py
 
