@@ -1,0 +1,65 @@
+name: Trip Simulation and AWS Logging
+
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+jobs:
+  validate_trip:
+    runs-on: ubuntu-latest
+
+    # Set up AWS credentials for the job
+    env:
+      AWS_REGION: ${{ secrets.AWS_REGION }}
+      AWS_BUCKET_NAME: 'your-trip-logs-bucket' # Replace with your actual S3 bucket name
+
+    steps:
+      - name: ⬇️ Checkout Repository Code
+        uses: actions/checkout@v4
+
+      - name: 🐍 Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.x'
+
+      - name: ⚙️ Install Dependencies (boto3 for AWS)
+        # Boto3 is the AWS SDK for Python, needed for S3 operations
+        run: pip install pandas boto3
+
+      ---
+
+      - name: 🏃 Run Trip A Simulation
+        run: python simulate_trip_a.py
+
+      - name: ⚖️ Run Trip Comparison
+        run: python compare_trips.py
+
+      ---
+
+      - name: 🔑 Configure AWS Credentials
+        # This action securely configures the AWS credentials from GitHub secrets
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ env.AWS_REGION }}
+          
+      - name: ⬆️ Upload Log to S3
+        # Uses the AWS CLI (which is pre-installed on GitHub runners) to copy the log
+        # The log will be stored under a path that includes the commit SHA for unique identification
+        run: |
+          S3_KEY="logs/${{ github.sha }}/trip_comparison.log"
+          echo "Uploading trip_comparison.log to s3://${{ env.AWS_BUCKET_NAME }}/$S3_KEY"
+          aws s3 cp trip_comparison.log s3://${{ env.AWS_BUCKET_NAME }}/$S3_KEY
+          
+      ---
+      
+      - name: 📄 [Optional] Upload as GitHub Artifact
+        # Keep this step if you still want a temporary, quick-access copy on the GitHub run page
+        uses: actions/upload-artifact@v4
+        with:
+          name: trip-comparison-log-github
+          path: trip_comparison.log
+          retention-days: 7
