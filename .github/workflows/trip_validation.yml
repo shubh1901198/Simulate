@@ -47,7 +47,7 @@ jobs:
         # The log will be stored under a path that includes the commit SHA for unique identification
         run: |
           S3_KEY="logs/${{ github.sha }}/trip_comparison.log"
-          echo "Uploading trip_comparison.log to s3://${{ env.AWS_BUCKET_NAME }}/$S3_KEY"
+          echo "Uploading trip_comparison.log to s3://${{ env.your-trip-logs-bucket }}/$S3_KEY"
           aws s3 cp trip_comparison.log s3://${{ env.AWS_BUCKET_NAME }}/$S3_KEY
       
       - name: 📄 [Optional] Upload as GitHub Artifact
