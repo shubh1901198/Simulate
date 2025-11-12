@@ -31,7 +31,7 @@ jobs:
       ---
 
       - name: 🏃 Run Trip A Simulation
-        run: python simulate_trip_a.py
+        run: python src/simulate_trip_a.py
 
       - name: ⚖️ Run Trip Comparison
         run: python compare_trips.py
