@@ -30,7 +30,14 @@ jobs:
 
       - name: 🏃 Run Trip A Simulation
         run: python simulate_trip_a.py
-
+      - name: ✅ Verify trip_a_generated.csv exists
+  # Use 'ls -l' to list the file with details, or 'cat' to print its content
+        run: |
+               echo "Files in current directory:"
+                ls -l trip_a_generated.csv
+               echo "--- First 5 lines of the CSV ---"
+               head -n 5 trip_a_generated.csv
+               
       - name: ⚖️ Run Trip Comparison
         run: python compare_trips.py
 
