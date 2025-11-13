@@ -85,6 +85,10 @@ jobs:
         run: |
           mkdir -p ~/.kube
           echo "${{ secrets.KUBECONFIG_CONTENT }}" > ~/.kube/config
+          
+      - name: Verify Kubernetes Cluster
+        run: |
+            kubectl cluster-info
 
       - name: 🚀 Deploy to Kubernetes
         run: |
