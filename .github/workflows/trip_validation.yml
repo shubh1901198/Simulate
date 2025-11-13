@@ -35,8 +35,8 @@ jobs:
         run: |
                echo "Files in current directory:"
                 ls -l trip_a_generated.csv
-               echo "--- First 5 lines of the CSV ---"
-               head -n 5 trip_a_generated.csv
+               echo "--- First 10 lines of the CSV ---"
+               head -n 10 trip_a_generated.csv
                
       - name: ⚖️ Run Trip Comparison
         run: python compare_trips.py
