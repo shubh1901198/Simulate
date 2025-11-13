@@ -10,10 +10,9 @@ jobs:
   validate_trip:
     runs-on: ubuntu-latest
 
-    # Set up AWS credentials for the job
     env:
       AWS_REGION: ${{ secrets.AWS_REGION }}
-      AWS_BUCKET_NAME: 'githubactionrunnerlogs' # Replace with your actual S3 bucket name
+      AWS_BUCKET_NAME: 'githubactionrunnerlogs'
 
     steps:
       - name: ⬇️ Checkout Repository Code
@@ -24,48 +23,75 @@ jobs:
         with:
           python-version: '3.x'
 
-      - name: ⚙️ Install Dependencies (boto3 for AWS)
-        # Boto3 is the AWS SDK for Python, needed for S3 operations
+      - name: ⚙️ Install Dependencies
         run: pip install pandas boto3
 
       - name: 🏃 Run Trip A Simulation
         run: python simulate_trip_a.py
+
       - name: ✅ Verify trip_a_generated.csv exists
-  # Use 'ls -l' to list the file with details, or 'cat' to print its content
         run: |
-               echo "Files in current directory:"
-                ls -l trip_a_generated.csv
-               echo "--- First 10 lines of the CSV ---"
-               head -n 10 trip_a_generated.csv
-               
+          echo "Files in current directory:"
+          ls -l trip_a_generated.csv
+          echo "--- First 10 lines of the CSV ---"
+          head -n 10 trip_a_generated.csv
+
       - name: ⚖️ Run Trip Comparison
         run: python compare_trips.py
 
       - name: 🔑 Configure AWS Credentials
-        # This action securely configures the AWS credentials from GitHub secrets
         uses: aws-actions/configure-aws-credentials@v4
         with:
           aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
           aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
           aws-region: ${{ env.AWS_REGION }}
-          
+
       - name: ⬆️ Upload Log to S3
-        # Uses the AWS CLI (which is pre-installed on GitHub runners) to copy the log
-        # The log will be stored under a path that includes the commit SHA for unique identification
         run: |
           S3_KEY="logs/${{ github.sha }}/trip_comparison.log"
-          echo "Uploading trip_comparison.log to s3://${{ env.your-trip-logs-bucket }}/$S3_KEY"
+          echo "Uploading trip_comparison.log to s3://${{ env.AWS_BUCKET_NAME }}/$S3_KEY"
           aws s3 cp trip_comparison.log s3://${{ env.AWS_BUCKET_NAME }}/$S3_KEY
-      
-      - name: 📄 [Optional] Upload as GitHub Artifact
-        # Keep this step if you still want a temporary, quick-access copy on the GitHub run page
+
+      - name: 📄 Upload as GitHub Artifact
         uses: actions/upload-artifact@v4
         with:
           name: trip-comparison-log-github
           path: trip_comparison.log
           retention-days: 7
+
       - name: ✅ Check and Report Status
         run: |
-              echo "--- Comparison Results ---"
-              cat trip_comparison.log  # <--- This command prints the file content
-              echo "--------------------------"
+          echo "--- Comparison Results ---"
+          cat trip_comparison.log
+          echo "--------------------------"
+
+      # 🔽 NEW STEPS FOR DOCKER & KUBERNETES 🔽
+      - name: 🐳 Build Docker Image
+        run: |
+          docker build -t trip-simulation:latest .
+
+      - name: 🔐 Login to Docker Hub
+        uses: docker/login-action@v2
+        with:
+          username: ${{ secrets.DOCKER_USERNAME }}
+          password: ${{ secrets.DOCKER_PASSWORD }}
+
+      - name: 📤 Push Docker Image
+        run: |
+          docker tag trip-simulation:latest ${{ secrets.DOCKER_USERNAME }}/trip-simulation:latest
+          docker push ${{ secrets.DOCKER_USERNAME }}/trip-simulation:latest
+
+      - name: ⚙️ Set up kubectl
+        uses: azure/setup-kubectl@v3
+        with:
+          version: 'latest'
+
+      - name: 🔑 Configure Kubeconfig
+        run: |
+          mkdir -p ~/.kube
+          echo "${{ secrets.KUBECONFIG_CONTENT }}" > ~/.kube/config
+
+      - name: 🚀 Deploy to Kubernetes
+        run: |
+          kubectl apply -f k8s/deployment.yaml
+          kubectl apply -f k8s/service.yaml
