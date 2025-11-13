@@ -76,11 +76,6 @@ jobs:
           username: ${{ secrets.DOCKER_USERNAME }}
           password: ${{ secrets.DOCKER_PASSWORD }}
 
-      - name: 📤 Push Docker Image
-        run: |
-          docker tag trip-simulation:latest ${{ secrets.DOCKER_USERNAME }}/trip-simulation:latest
-          docker push ${{ secrets.DOCKER_USERNAME }}/trip-simulation:latest
-
       - name: ⚙️ Set up kubectl
         uses: azure/setup-kubectl@v3
         with:
