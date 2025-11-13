@@ -1,0 +1,29 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: trip-simulator-deployment
+  labels:
+    app: trip-simulator
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: trip-simulator
+  template:
+    metadata:
+      labels:
+        app: trip-simulator
+    spec:
+      containers:
+        - name: trip-simulator
+          image: trip-simulator:latest
+          imagePullPolicy: IfNotPresent
+          ports:
+            - containerPort: 8080
+          resources:
+            requests:
+              cpu: "250m"
+              memory: "256Mi"
+            limits:
+              cpu: "500m"
+              memory: "512Mi"
