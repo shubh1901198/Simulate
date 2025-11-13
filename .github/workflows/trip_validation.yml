@@ -81,14 +81,15 @@ jobs:
         with:
           version: 'latest'
 
-      - name: 🔑 Configure Kubeconfig
+      - name: Configure Kubeconfig
         run: |
-          mkdir -p ~/.kube
-          echo "${{ secrets.KUBECONFIG_CONTENT }}" > ~/.kube/config
-          
+           mkdir -p ~/.kube
+           echo "${{ secrets.KUBE_CONFIG }}" | base64 --decode > ~/.kube/config
+
       - name: Verify Kubernetes Cluster
         run: |
             kubectl cluster-info
+            kubectl get nodes
 
       - name: 🚀 Deploy to Kubernetes
         run: |
