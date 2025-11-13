@@ -63,5 +63,4 @@ def main():
     print("Columns:", ", ".join(df.columns))
 
 if __name__ == "__main__":
-    main()
-    
+    main()  
