@@ -1,4 +1,4 @@
-name: Trip Simulation and EKS Deployment
+name: Trip Simulation and AWS Logging
 
 on:
   push:
@@ -7,40 +7,38 @@ on:
   workflow_dispatch:
 
 jobs:
-  trip_pipeline:
+  validate_trip:
     runs-on: ubuntu-latest
 
     env:
       AWS_REGION: ${{ secrets.AWS_REGION }}
-      AWS_BUCKET_NAME: ${{ secrets.AWS_BUCKET_NAME }}
-      IMAGE_NAME: ${{ secrets.DOCKER_USERNAME }}/trip-simulation:latest
+      AWS_BUCKET_NAME: 'githubactionrunnerlogs'
 
     steps:
-      # 1. Checkout Code
-      - name: ⬇️ Checkout Repository
+      - name: ⬇️ Checkout Repository Code
         uses: actions/checkout@v4
 
-      # 2. Setup Python
-      - name: 🐍 Setup Python
+      - name: 🐍 Set up Python
         uses: actions/setup-python@v5
         with:
           python-version: '3.x'
 
-      # 4. Run Simulation
+      - name: ⚙️ Install Dependencies
+        run: pip install pandas boto3
+
       - name: 🏃 Run Trip A Simulation
         run: python simulate_trip_a.py
 
-      # 5. Verify CSV
-      - name: ✅ Verify trip_a_generated.csv
+      - name: ✅ Verify trip_a_generated.csv exists
         run: |
+          echo "Files in current directory:"
           ls -l trip_a_generated.csv
+          echo "--- First 10 lines of the CSV ---"
           head -n 10 trip_a_generated.csv
 
-      # 6. Compare Trips
       - name: ⚖️ Run Trip Comparison
         run: python compare_trips.py
 
-      # 7. Configure AWS Credentials
       - name: 🔑 Configure AWS Credentials
         uses: aws-actions/configure-aws-credentials@v4
         with:
@@ -48,50 +46,43 @@ jobs:
           aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
           aws-region: ${{ env.AWS_REGION }}
 
-      # 8. Upload Log to S3
       - name: ⬆️ Upload Log to S3
         run: |
           S3_KEY="logs/${{ github.sha }}/trip_comparison.log"
+          echo "Uploading trip_comparison.log to s3://${{ env.AWS_BUCKET_NAME }}/$S3_KEY"
           aws s3 cp trip_comparison.log s3://${{ env.AWS_BUCKET_NAME }}/$S3_KEY
 
-      # 9. Upload GitHub Artifact
-      - name: 📄 Upload Artifact
+      - name: 📄 Upload as GitHub Artifact
         uses: actions/upload-artifact@v4
         with:
-          name: trip-comparison-log
+          name: trip-comparison-log-github
           path: trip_comparison.log
           retention-days: 7
 
-      # 10. Build Docker Image
-      - name: 🐳 Build Docker Image
-        run: docker build -t trip-simulation:latest .
+      - name: ✅ Check and Report Status
+        run: |
+          echo "--- Comparison Results ---"
+          cat trip_comparison.log
+          echo "--------------------------"
 
-      # 11. Login to Docker Hub
-      - name: 🔐 Docker Login
+      # 🔽 NEW STEPS FOR DOCKER & KUBERNETES 🔽
+      - name: 🐳 Build Docker Image
+        run: |
+          docker build -t trip-simulation:latest .
+
+      - name: 🔐 Login to Docker Hub
         uses: docker/login-action@v2
         with:
           username: ${{ secrets.DOCKER_USERNAME }}
           password: ${{ secrets.DOCKER_PASSWORD }}
-
-      # 12. Push Docker Image
+          
       - name: 🐳 Push Docker Image
         run: |
+          IMAGE_NAME=${{ secrets.DOCKER_USERNAME }}/trip-simulation:latest
           docker tag trip-simulation:latest $IMAGE_NAME
           docker push $IMAGE_NAME
 
-      # 13. Configure Kubeconfig for EKS
-      - name: 🔧 Configure Kubeconfig
+      - name: Configure Kubeconfig for EKS
         run: |
           mkdir -p ~/.kube
           echo "${{ secrets.KUBE_CONFIG }}" | base64 --decode > ~/.kube/config
-
-      # 14. Deploy to EKS
-      - name: 🚀 Deploy to EKS
-        run: |
-          kubectl apply -f k8s/deployment.yaml
-          kubectl apply -f k8s/service.yaml
-          
-      # 15. Install ADOT Collector for Monitoring
-      - name: 📊 Install ADOT Collector
-        run: |
-          kubectl apply -f https://github.com/aws-observability/aws-otel-collector/releases/latest/download/aws-otel-collector.yaml
