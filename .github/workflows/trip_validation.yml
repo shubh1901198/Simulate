@@ -81,23 +81,23 @@ jobs:
           IMAGE_NAME=${{ secrets.DOCKER_USERNAME }}/trip-simulation:latest
           docker tag trip-simulation:latest $IMAGE_NAME
           docker push $IMAGE_NAME
-          
-      - name: ⚙️ Set up kubectl
+      - name: ⚙️ Install kubectl
         uses: azure/setup-kubectl@v3
         with:
           version: 'latest'
 
-      - name: Configure Kubeconfig
+      - name: Configure Kubeconfig for EKS
         run: |
-           mkdir -p ~/.kube
-           echo "${{ secrets.KUBE_CONFIG }}" | base64 --decode > ~/.kube/config
+          mkdir -p ~/.kube
+          echo "${{ secrets.KUBE_CONFIG }}" | base64 --decode > ~/.kube/config
 
-      - name: Verify Kubernetes Cluster
+      - name: ✅ Verify EKS Cluster
         run: |
-            kubectl cluster-info
-            kubectl get nodes
+          kubectl cluster-info
+          kubectl get nodes
 
-      - name: 🚀 Deploy to Kubernetes
+      - name: 🚀 Deploy to EKS
         run: |
           kubectl apply -f k8s/deployment.yaml
           kubectl apply -f k8s/service.yaml
+          kubectl rollout status deployment/my-app
