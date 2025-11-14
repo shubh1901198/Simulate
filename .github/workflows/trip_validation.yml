@@ -81,13 +81,8 @@ jobs:
           IMAGE_NAME=${{ secrets.DOCKER_USERNAME }}/trip-simulation:latest
           docker tag trip-simulation:latest $IMAGE_NAME
           docker push $IMAGE_NAME
-          
+
       - name: Configure Kubeconfig for EKS
         run: |
           mkdir -p ~/.kube
           echo "${{ secrets.KUBE_CONFIG }}" | base64 --decode > ~/.kube/config
-
-      - name: ✅ Verify EKS Cluster
-        run: |
-          kubectl cluster-info
-          kubectl get nodes
