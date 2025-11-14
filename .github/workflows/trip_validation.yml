@@ -26,10 +26,6 @@ jobs:
         with:
           python-version: '3.x'
 
-      # 3. Install Dependencies
-      - name: ⚙️ Install Dependencies
-        run: pip install -r requirements.txt
-
       # 4. Run Simulation
       - name: 🏃 Run Trip A Simulation
         run: python simulate_trip_a.py
