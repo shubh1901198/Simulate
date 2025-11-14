@@ -94,7 +94,7 @@ jobs:
         run: |
           kubectl apply -f k8s/deployment.yaml
           kubectl apply -f k8s/service.yaml
-
+          
       # 15. Install ADOT Collector for Monitoring
       - name: 📊 Install ADOT Collector
         run: |
