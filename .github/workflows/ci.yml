@@ -150,7 +150,7 @@ jobs:
           POD=$(kubectl get pods --selector=job-name=trip-simulation-job -o jsonpath='{.items[0].metadata.name}')
           echo "Pod: $POD"
           kubectl logs "$POD" > job-logs.txt || true
-
+          
       - name: Upload deployed job logs
         uses: actions/upload-artifact@v4
         with:
