@@ -68,8 +68,10 @@ jobs:
           IMAGE_NAME=${{ secrets.DOCKER_USERNAME }}/trip-simulation:latest
           docker tag trip-simulation:latest $IMAGE_NAME
           docker push $IMAGE_NAME
-
-      - name: Configure Kubeconfig for EKS
+          
+      - name: Configure Kubeconfig for Self-Managed Cluster
         run: |
-          mkdir -p ~/.kube
-          echo "${{ secrets.KUBE_CONFIG }}" | base64 --decode > ~/.kube/config
+            mkdir -p ~/.kube
+            echo "${{ secrets.SELF_MANAGED_KUBE_CONFIG }}" | base64 --decode > ~/.kube/config
+                chmod 600 ~/.kube/config
+
