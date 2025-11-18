@@ -1,0 +1,148 @@
+name: CI - Simulate & Deploy
+
+# Run the Python scripts, build/push an image, and optionally deploy to Kubernetes
+on:
+  push:
+    branches: [ main ]
+  workflow_dispatch: {}
+
+permissions:
+  contents: read
+  packages: write
+
+jobs:
+  test:
+    name: Run simulation and comparison
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.11'
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install pandas boto3
+
+      - name: Run simulate_trip_a.py
+        run: python simulate_trip_a.py
+
+      - name: Run compare_trips.py
+        run: python compare_trips.py || true
+        # allow non-zero exits if scripts intentionally fail; the artifact will still be collected
+
+      - name: Upload artifacts (CSV + log)
+        uses: actions/upload-artifact@v4
+        with:
+          name: trip-artifacts
+          path: |
+            trip_a_generated.csv
+            trip_comparison.log
+
+  build-and-push:
+    name: Build and push Docker image to GHCR
+    runs-on: ubuntu-latest
+    needs: test
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up QEMU
+        uses: docker/setup-qemu-action@v2
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v2
+
+      - name: Log in to GitHub Container Registry
+        uses: docker/login-action@v2
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build and push image to GHCR
+        uses: docker/build-push-action@v4
+        with:
+          push: true
+          tags: ghcr.io/${{ github.repository_owner }}/trip-simulation:latest
+          file: dockerfile
+
+  run-image:
+    name: Run built image and collect artifacts
+    runs-on: ubuntu-latest
+    needs: build-and-push
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Log in to GHCR
+        uses: docker/login-action@v2
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Pull image from GHCR
+        run: |
+          IMAGE=ghcr.io/${{ github.repository_owner }}/trip-simulation:latest
+          docker pull "$IMAGE"
+
+      - name: Run image and persist outputs to workspace
+        # Mount workspace so generated files are written back to the runner for upload
+        run: |
+          IMAGE=ghcr.io/${{ github.repository_owner }}/trip-simulation:latest
+          mkdir -p $GITHUB_WORKSPACE/out
+          docker run --rm -v "$GITHUB_WORKSPACE":/app -w /app "$IMAGE"
+
+      - name: Upload artifacts from container run
+        uses: actions/upload-artifact@v4
+        with:
+          name: image-run-artifacts
+          path: |
+            trip_a_generated.csv
+            trip_comparison.log
+
+      # Optional: add a push-to-Docker-Hub step here if you provide DOCKERHUB_USERNAME and DOCKERHUB_TOKEN secrets
+
+  deploy:
+    name: Deploy job to Kubernetes (optional)
+    runs-on: ubuntu-latest
+    needs: build-and-push
+    if: ${{ secrets.KUBECONFIG != '' }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install kubectl
+        uses: azure/setup-kubectl@v3
+        with:
+          version: 'stable'
+
+      - name: Configure kubeconfig
+        run: |
+          echo "${{ secrets.KUBECONFIG }}" > $HOME/.kube/config
+
+      - name: Apply Job manifest
+        run: |
+          kubectl apply -f k8s/job.yaml
+
+      - name: Wait for Job completion
+        run: |
+          kubectl wait --for=condition=complete --timeout=120s job/trip-simulation-job || true
+
+      - name: Capture Job logs to file
+        run: |
+          # Get most recent pod created by the job and capture logs to a file
+          POD=$(kubectl get pods --selector=job-name=trip-simulation-job -o jsonpath='{.items[0].metadata.name}')
+          echo "Pod: $POD"
+          kubectl logs "$POD" > job-logs.txt || true
+
+      - name: Upload deployed job logs
+        uses: actions/upload-artifact@v4
+        with:
+          name: k8s-job-logs
+          path: job-logs.txt
