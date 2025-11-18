@@ -127,7 +127,8 @@ jobs:
       - name: Install kubectl
         uses: azure/setup-kubectl@v3
         with:
-          version: 'stable'
+          # use a concrete supported value; 'stable' isn't available on this action
+          version: 'latest'
 
       - name: Configure kubeconfig
         run: |
