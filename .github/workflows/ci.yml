@@ -129,12 +129,13 @@ jobs:
         with:
           # use a concrete supported value; 'stable' isn't available on this action
           version: 'latest'
-
-      - name: Configure kubeconfig
-        run: |
-          mkdir -p $HOME/.kube # Create directory if it doesn't exist
-          echo "${{ secrets.KUBECONFIG }}" | base64 --decode > $HOME/.kube/config
           
+      - name: Configure kubeconfig and Ensure Readability
+        run: |
+          mkdir -p $HOME/.kube
+          echo "${{ secrets.KUBECONFIG }}" | base64 --decode > $HOME/.kube/config
+          chmod 600 $HOME/.kube/config
+  
       - name: Apply Job manifest
         run: |
           kubectl apply -f k8s/job.yaml
