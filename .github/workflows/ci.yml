@@ -132,10 +132,9 @@ jobs:
 
       - name: Configure kubeconfig
         run: |
-          mkdir -p $HOME/.kube
-          echo "${{ secrets.KUBECONFIG }}" > $HOME/.kube/config
-          chmod 600 $HOME/.kube/config
-
+          mkdir -p $HOME/.kube # Create directory if it doesn't exist
+          echo "${{ secrets.KUBECONFIG }}" | base64 --decode > $HOME/.kube/config
+          
       - name: Apply Job manifest
         run: |
           kubectl apply -f k8s/job.yaml
