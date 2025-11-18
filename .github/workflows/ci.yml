@@ -112,8 +112,15 @@ jobs:
     name: Deploy job to Kubernetes (optional)
     runs-on: ubuntu-latest
     needs: build-and-push
-    if: ${{ secrets.KUBECONFIG != '' }}
     steps:
+      - name: Check for KUBECONFIG secret
+        id: check_kubeconfig
+        run: |
+          if [ -z "${{ secrets.KUBECONFIG }}" ]; then
+            echo "::notice::KUBECONFIG secret not set, skipping deploy job."
+            exit 78
+          fi
+
       - name: Checkout
         uses: actions/checkout@v4
 
