@@ -39,19 +39,6 @@ jobs:
       - name: ⚖️ Run Trip Comparison
         run: python compare_trips.py
 
-      - name: 🔑 Configure AWS Credentials
-        uses: aws-actions/configure-aws-credentials@v4
-        with:
-          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
-          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
-          aws-region: ${{ env.AWS_REGION }}
-
-      - name: ⬆️ Upload Log to S3
-        run: |
-          S3_KEY="logs/${{ github.sha }}/trip_comparison.log"
-          echo "Uploading trip_comparison.log to s3://${{ env.AWS_BUCKET_NAME }}/$S3_KEY"
-          aws s3 cp trip_comparison.log s3://${{ env.AWS_BUCKET_NAME }}/$S3_KEY
-
       - name: 📄 Upload as GitHub Artifact
         uses: actions/upload-artifact@v4
         with:
