@@ -115,13 +115,19 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
-        
-      # 1. Start a temporary cluster using KinD
-      - name: Setup KinD Cluster
-        uses: engineerd/setup-kind@v0.6.0
-        with:
-          version: 'v0.20.0' # Use a recent stable version
 
+      - name: Install KinD and Kubectl
+        run: |
+
+          curl -LO "https://dl.k8s.io/release/$(curl -L -s https://dl.k8s.io/release/stable.txt)/bin/linux/amd64/kubectl"
+            sudo install -o root -g root -m 0755 kubectl /usr/local/bin/kubectl
+
+          [ "$(uname -m)" = x86_64 ] && curl -Lo ./kind https://kind.sigs.k8s.io/dl/v0.20.0/kind-linux-amd64
+          chmod +x ./kind
+          sudo install ./kind /usr/local/bin/kind
+      - name: Create KinD Cluster
+        run: kind create cluster
+        
       # 2. kubectl is now configured to use the KinD cluster
       - name: Apply Job YAML
         run: kubectl apply -f k8s/job.yaml
