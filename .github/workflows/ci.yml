@@ -115,21 +115,16 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
-
-      - name: Install kubectl
-        uses: azure/setup-kubectl@v3
+        
+      # 1. Start a temporary cluster using KinD
+      - name: Setup KinD Cluster
+        uses: engineerd/setup-kind@v0.6.0
         with:
-          # use a concrete supported value; 'stable' isn't available on this action
-          version: 'latest'
-          
-      - name: Configure Kubeconfig for Remote Cluster
-        run: |
-            mkdir -p $HOME/.kube
-            echo "${{ secrets.KUBECONFIG }}" | base64 --decode > $HOME/.kube/config 
+          version: 'v0.20.0' # Use a recent stable version
 
-      - name: Apply Job manifest
-        run: |
-          kubectl apply -f k8s/job.yaml
+      # 2. kubectl is now configured to use the KinD cluster
+      - name: Apply Job YAML
+        run: kubectl apply -f k8s/job.yaml
 
       - name: Wait for Job completion
         run: |
