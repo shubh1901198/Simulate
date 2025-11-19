@@ -119,7 +119,7 @@ jobs:
             trip_a_generated_${{ github.run_id }}.csv
 
   deploy:
-    name: Deploy job to Kubernetes (optional)
+    name: Deploy job to Kubernetes
     runs-on: ubuntu-latest
     needs: [build-and-push, run-image] # Dependency on run-image is crucial for the log file
     steps:
