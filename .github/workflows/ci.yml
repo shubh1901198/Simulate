@@ -33,20 +33,19 @@ jobs:
 
       - name: Run compare_trips.py
         run: python compare_trips.py || true
-        # The script creates 'trip_comparison.log'
 
       - name: Rename Log with Run ID
         run: |
-          # Rename the fixed log file to include the unique GITHUB_RUN_ID
+          # Rename the fixed log file to include the unique GITHUB_RUN_ID for later consolidation
           mv trip_comparison.log trip_comparison_${{ github.run_id }}.log
 
-      - name: Upload artifacts (CSV + log)
+      - name: Upload artifacts (CSV + temporary log)
         uses: actions/upload-artifact@v4
         with:
           name: trip-artifacts-${{ github.run_id }}
           path: |
             trip_a_generated.csv
-            trip_comparison_${{ github.run_id }}.log # Use the new unique filename
+            trip_comparison_${{ github.run_id }}.log
 
   build-and-push:
     name: Build and push Docker image to GHCR
@@ -103,21 +102,41 @@ jobs:
           mkdir -p $GITHUB_WORKSPACE/out
           docker run --rm -v "$GITHUB_WORKSPACE":/app -w /app "$IMAGE"
 
-      - name: Upload artifacts from container run
+      - name: Prepare Combined Log File (Step 1)
+        run: |
+          # Rename the comparison log to the final unique log name and store it
+          FINAL_LOG_NAME="combined-trip-logs-${{ github.run_id }}.txt"
+          mv trip_comparison.log "$FINAL_LOG_NAME"
+          mv trip_a_generated.csv trip_a_generated_${{ github.run_id }}.csv
+
+      - name: Upload temporary Artifacts for Deployment Job
         uses: actions/upload-artifact@v4
         with:
-          name: image-run-artifacts-${{ github.run_id }}
+          # Use a fixed, easily downloadable name for the temporary artifact
+          name: temp-combined-log
           path: |
-            trip_a_generated.csv
-            trip_comparison.log
+            combined-trip-logs-${{ github.run_id }}.txt
+            trip_a_generated_${{ github.run_id }}.csv
 
   deploy:
     name: Deploy job to Kubernetes (optional)
     runs-on: ubuntu-latest
-    needs: build-and-push
+    needs: [build-and-push, run-image] # Dependency on run-image is crucial for the log file
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+
+      # --- LOG CONSOLIDATION START ---
+      - name: Download Simulation Log
+        uses: actions/download-artifact@v4
+        with:
+          name: temp-combined-log
+
+      - name: Set Log File Name ENV
+        run: |
+          # Set the expected unique log name for use in subsequent steps
+          echo "FINAL_LOG_NAME=combined-trip-logs-${{ github.run_id }}.txt" >> $GITHUB_ENV
+      # --- LOG CONSOLIDATION END ---
 
       - name: Install KinD and Kubectl
         run: |
@@ -134,32 +153,29 @@ jobs:
         run: kind create cluster
           
       - name: Verify KinD Cluster Access
-        run: |
-          echo "--- Current Kube Context ---"
-          kubectl config current-context
-          echo "--- Node Status ---"
-          # Wait for the node to be ready before proceeding
-          kubectl wait --for=condition=Ready node/kind-control-plane --timeout=60s
-          kubectl get nodes
+        run: kubectl wait --for=condition=Ready node/kind-control-plane --timeout=60s
 
       - name: Apply Job YAML
         run: kubectl apply -f k8s/job.yaml
 
       - name: Wait for Job completion
-        run: |
-          kubectl wait --for=condition=complete --timeout=120s job/trip-simulation-job || true
+        run: kubectl wait --for=condition=complete --timeout=120s job/trip-simulation-job || true
 
-      - name: Capture Job logs to file
+      - name: Capture and Append K8s Job logs (Step 2)
         run: |
-          # Get most recent pod created by the job and capture logs to a unique file
-          POD=$(kubectl get pods --selector=job-name=trip-simulation-job -o jsonpath='{.items[0].metadata.name}')
-          echo "Pod: $POD"
-          LOG_FILENAME="k8s-job-logs-${{ github.run_id }}.txt"
-          kubectl logs "$POD" > "$LOG_FILENAME" || true
-          echo "LOG_FILENAME=$LOG_FILENAME" >> $GITHUB_ENV # Set as environment variable
+          # Append the K8s logs to the existing file using '>>'
+          echo -e "\n\n=======================================================" >> ${{ env.FINAL_LOG_NAME }}
+          echo "  --- LOGS FROM KUBERNETES JOB EXECUTION (Pod Console) ---" >> ${{ env.FINAL_LOG_NAME }}
+          echo "=======================================================\n" >> ${{ env.FINAL_LOG_NAME }}
           
-      - name: Upload deployed job logs
+          # Get the Pod name and append logs
+          POD=$(kubectl get pods --selector=job-name=trip-simulation-job -o jsonpath='{.items[0].metadata.name}')
+          kubectl logs "$POD" >> ${{ env.FINAL_LOG_NAME }} || true
+          
+      - name: Upload Final Combined Log and Artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: k8s-job-logs-${{ github.run_id }}
-          path: ${{ env.LOG_FILENAME }} # Use the environment variable for the unique file path
+          name: final-combined-log-${{ github.run_id }}
+          path: |
+            ${{ env.FINAL_LOG_NAME }}
+            trip_a_generated_${{ github.run_id }}.csv
