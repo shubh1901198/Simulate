@@ -104,7 +104,7 @@ jobs:
 
       - name: Prepare Combined Log File (Step 1)
         run: |
-          # Rename the comparison log to the final unique log name and store it
+          # Rename the comparison log and CSV to their final unique names
           FINAL_LOG_NAME="combined-trip-logs-${{ github.run_id }}.txt"
           mv trip_comparison.log "$FINAL_LOG_NAME"
           mv trip_a_generated.csv trip_a_generated_${{ github.run_id }}.csv
@@ -112,7 +112,7 @@ jobs:
       - name: Upload temporary Artifacts for Deployment Job
         uses: actions/upload-artifact@v4
         with:
-          # Use a fixed, easily downloadable name for the temporary artifact
+          # Use a fixed name for the temporary artifact so the next job can easily download it
           name: temp-combined-log
           path: |
             combined-trip-logs-${{ github.run_id }}.txt
@@ -126,17 +126,18 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      # --- LOG CONSOLIDATION START ---
+      ## --- LOG CONSOLIDATION START ---
       - name: Download Simulation Log
         uses: actions/download-artifact@v4
         with:
           name: temp-combined-log
 
-      - name: Set Log File Name ENV
+      - name: Set Log and CSV File Name ENV
         run: |
-          # Set the expected unique log name for use in subsequent steps
+          # Set the expected unique file names for use in subsequent steps
           echo "FINAL_LOG_NAME=combined-trip-logs-${{ github.run_id }}.txt" >> $GITHUB_ENV
-      # --- LOG CONSOLIDATION END ---
+          echo "FINAL_CSV_NAME=trip_a_generated_${{ github.run_id }}.csv" >> $GITHUB_ENV
+      ## --- LOG CONSOLIDATION END ---
 
       - name: Install KinD and Kubectl
         run: |
@@ -178,4 +179,31 @@ jobs:
           name: final-combined-log-${{ github.run_id }}
           path: |
             ${{ env.FINAL_LOG_NAME }}
-            trip_a_generated_${{ github.run_id }}.csv
+            ${{ env.FINAL_CSV_NAME }}
+
+      - name: Send Email with Artifacts 📧
+        uses: dawidd6/action-send-mail@v6
+        with:
+          # Configure these server settings based on your email provider (e.g., Gmail, Outlook, SendGrid)
+          server_address: smtp.gmail.com 
+          server_port: 465
+          secure: true
+          # Use GitHub Secrets for secure credentials
+          username: ${{ secrets.MAIL_USERNAME }}
+          password: ${{ secrets.MAIL_PASSWORD }}
+          
+          # Email Content
+          subject: 'CI/CD Run ${{ github.run_id }} Complete: K8s Trip Simulation Report'
+          body: |
+            The CI/CD workflow for ${{ github.repository }} has completed.
+            Status: ${{ job.status }}
+            
+            Find the combined simulation logs and the generated CSV attached.
+            
+            Workflow Run URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+            
+          to: 'recipient@example.com'  # <-- Change this to the actual recipient email
+          from: 'sender@example.com'   # <-- Change this to your actual sender email
+          # Attach the files that were just finalized in the previous step
+          attachments: ${{ env.FINAL_LOG_NAME }}, ${{ env.FINAL_CSV_NAME }}
+          if: always() # Ensures the email is sent even if the deployment failed
