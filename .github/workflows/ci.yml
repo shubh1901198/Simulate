@@ -121,7 +121,7 @@ jobs:
   deploy:
     name: Deploy job to Kubernetes
     runs-on: ubuntu-latest
-    needs: [build-and-push, run-image] # Dependency on run-image is crucial for the log file
+    needs: [build-and-push, run-image]
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -184,11 +184,11 @@ jobs:
       - name: Send Email with Artifacts 📧
         uses: dawidd6/action-send-mail@v6
         with:
-          # Configure these server settings based on your email provider (e.g., Gmail, Outlook, SendGrid)
+          # --- CHECK YOUR SMTP SETTINGS ---
           server_address: smtp.gmail.com 
           server_port: 465
           secure: true
-          # Use GitHub Secrets for secure credentials
+          # Use GitHub Secrets for secure credentials (App Password required!)
           username: ${{ secrets.MAIL_USERNAME }}
           password: ${{ secrets.MAIL_PASSWORD }}
           
@@ -202,8 +202,8 @@ jobs:
             
             Workflow Run URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
             
-          to: 'recipient@example.com'  # <-- Change this to the actual recipient email
-          from: 'sender@example.com'   # <-- Change this to your actual sender email
-          # Attach the files that were just finalized in the previous step
+          to: 'recipient@example.com'  # <-- UPDATE THIS
+          from: 'sender@example.com'   # <-- UPDATE THIS
+          
           attachments: ${{ env.FINAL_LOG_NAME }}, ${{ env.FINAL_CSV_NAME }}
-          if: always() # Ensures the email is sent even if the deployment failed
+          if: always()
