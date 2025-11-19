@@ -80,15 +80,15 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
-      
-      # *** ADD THIS LOGIN STEP ***
+
       - name: Log in to GitHub Container Registry
         uses: docker/login-action@v2
         with:
           registry: ghcr.io
-          username: ${{ github.actor }}
-          password: ${{ secrets.GITHUB_TOKEN }}
-          
+          username: ${{ github.actor }} # Uses the username that triggered the workflow
+          password: ${{ secrets.GITHUB_TOKEN }} # Uses the temporary, automatically generated token
+          logout: true # Keeps your original setting
+      
       - name: Create KinD Cluster
         run: kind create cluster
           
