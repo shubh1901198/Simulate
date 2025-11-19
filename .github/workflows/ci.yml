@@ -126,7 +126,7 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      ## --- LOG CONSOLIDATION START ---
+      ## --- LOG CONSOLIDATION START (Download Previous Logs) ---
       - name: Download Simulation Log
         uses: actions/download-artifact@v4
         with:
@@ -202,8 +202,8 @@ jobs:
             
             Workflow Run URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
             
-          to: 'recipient@example.com'  # <-- UPDATE THIS
-          from: 'sender@example.com'   # <-- UPDATE THIS
+          to: 'recipient@example.com'  # <--- REPLACE THIS
+          from: 'sender@example.com'   # <--- REPLACE THIS
           
           attachments: ${{ env.FINAL_LOG_NAME }}, ${{ env.FINAL_CSV_NAME }}
           if: always()
