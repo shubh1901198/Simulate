@@ -81,14 +81,14 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
       
+      
       - name: Log in to GitHub Container Registry
         uses: docker/login-action@v3
         with:
           registry: ghcr.io
           username: ${{ github.actor }}
-          password: ${{ secrets.GITHUB_TOKEN}}
-          logout: true
-      
+          password: ${{ secrets.GITHUB_TOKEN }}
+
       - name: Create KinD Cluster
         run: kind create cluster
           
