@@ -148,8 +148,9 @@ jobs:
         uses: actions/download-artifact@v4
         with:
           name: temp-k8s-log
-          # Downloads the artifact 'temp-k8s-log' with file 'intermediate_combined_log.txt'
-          # into the 'temp-k8s-log/' subdirectory.
+          # FIX: Explicitly set path to '.' so the file downloads to the workspace root.
+          path: . 
+          
 
       - name: Set Log File Name ENV and Prepare Files
         run: |
@@ -160,9 +161,8 @@ jobs:
           echo "FINAL_LOG_NAME=$FINAL_LOG_NAME" >> $GITHUB_ENV
           echo "FINAL_CSV_NAME=$FINAL_CSV_NAME" >> $GITHUB_ENV
           
-          # Move the downloaded log (from run #1) to its final file name
-          # This must be done from the subdirectory created by download-artifact
-          mv temp-k8s-log/intermediate_combined_log.txt "$FINAL_LOG_NAME"
+          # FIX: Since we set the download path to '.', the file is now in the root directory.
+          mv intermediate_combined_log.txt "$FINAL_LOG_NAME"
           
           # Create a placeholder CSV file for upload
           touch "$FINAL_CSV_NAME"
