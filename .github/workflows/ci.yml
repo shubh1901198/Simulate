@@ -1,8 +1,7 @@
-name: CI - Simulate & Deploy (Single K8s Pod, Sequential Runs)
+name: CI - Simulate & Deploy (Two K8s Runs)
 
-# This workflow builds a Docker image and runs the simulation twice sequentially
-# inside a single Kubernetes Pod (using InitContainer + Main Container) via KinD,
-# to test for environmental consistency.
+# This workflow runs a Python check, builds a Docker image, and then runs the image
+# as two separate Jobs inside a KinD Kubernetes cluster to test for consistency.
 on:
   push:
     branches: [ main ]
@@ -13,23 +12,42 @@ permissions:
   packages: write # Needed for pushing the Docker image to GHCR
 
 jobs:
-  # --- JOB 0: Python Check (Fast Fail Gate) ---
   test:
-    name: Run Python Tests/Lint
+    name: Run simulation and comparison (Local Python Check)
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
         uses: actions/checkout@v4
-        
-      - name: Set up Python
-        uses: actions/setup-python@v5
-        with:
-          python-version: '3.x'
-          
-      - name: Run Dummy Check
-        run: echo "Python check passed. Replace this with your actual tests."
 
-  # --- JOB 1: Build and Push Docker Image ---
+      - name: Setup Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.11'
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install pandas boto3
+
+      - name: Run simulate_trip_a.py
+        run: python simulate_trip_a.py
+
+      - name: Run compare_trips.py
+        run: python compare_trips.py || true
+
+      - name: Rename Log with Run ID (Pre-K8s Check)
+        run: |
+          # The result of this check is saved as an artifact, but not included in the final email log.
+          mv trip_comparison.log trip_comparison_${{ github.run_id }}_python_check.log
+
+      - name: Upload artifacts (Local Python Output)
+        uses: actions/upload-artifact@v4
+        with:
+          name: trip-artifacts-${{ github.run_id }}
+          path: |
+            trip_a_generated.csv
+            trip_comparison_${{ github.run_id }}_python_check.log
+
   build-and-push:
     name: Build and push Docker image to GHCR
     runs-on: ubuntu-latest
@@ -41,85 +59,148 @@ jobs:
       - name: Set up QEMU
         uses: docker/setup-qemu-action@v2
         
-      - name: Log in to GHCR 🔑
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v2
+        
+      - name: Log in to GHCR
         uses: docker/login-action@v3
         with:
           registry: ghcr.io
-          username: ${{ github.actor }}
-          password: ${{ secrets.GITHUB_TOKEN }} # Use built-in token for secure GHCR access
+          username: shubh1901198
+          password: ${{ secrets.GHCR_PAT }}
+      
+      - name: Log in to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: shubh1901198
+          password: ${{ secrets.GHCR_PAT }}
 
       - name: Build and Push Docker Image
         run: |
-          IMAGE_TAG=ghcr.io/${{ github.repository_owner }}/trip-simulation:latest
-          docker build -t "$IMAGE_TAG" .
-          docker push "$IMAGE_TAG"
-          
-# --- JOB 2: Single K8s Sequential Execution (Consolidated Log) ---
-  k8s-sequential-run:
-    name: K8s Sequential Execution (Single Pod)
+          docker build -t ghcr.io/shubh1901198/trip-simulation:latest .
+          docker push ghcr.io/shubh1901198/trip-simulation:latest   
+    
+# --- JOB 1: First K8s Execution (Generates Detailed Log) ---
+  k8s-run-1:
+    name: K8s Execution_1 #1 (Detailed Log)
     runs-on: ubuntu-latest
     needs: build-and-push
     steps:
       - name: Checkout
         uses: actions/checkout@v4
-
-      # Login required to pull the image from GHCR onto the runner's Docker daemon
-      - name: Log in to GHCR 🔑
+        
+      - name: Log in to GHCR
         uses: docker/login-action@v3
         with:
           registry: ghcr.io
-          username: ${{ github.actor }}
-          password: ${{ secrets.GITHUB_TOKEN }}
+          username: shubh1901198
+          password: ${{ secrets.GHCR_PAT }}
 
-      - name: Install KinD and Kubectl 🛠️
+      - name: Create KinD Cluster
+        run: kind create cluster
+          
+      - name: Pull Image to Runner Docker Daemon
         run: |
-          # Install Kubectl
+          IMAGE=ghcr.io/${{ github.repository_owner }}/trip-simulation:latest
+          docker pull "$IMAGE"
+
+      - name: Load Docker Image into KinD
+        run: |
+          IMAGE=ghcr.io/${{ github.repository_owner }}/trip-simulation:latest
+          kind load docker-image "$IMAGE"
+      
+      - name: Apply Job YAML (Run #1)
+        run: kubectl apply -f k8s/job.yaml
+
+      - name: Wait for Job #1 completion
+        run: kubectl wait --for=condition=complete --timeout=120s job/trip-simulation-job || true
+
+      - name: Capture Detailed K8s Log (Run #1)
+        run: |
+          POD=$(kubectl get pods --selector=job-name=trip-simulation-job -o jsonpath='{.items[0].metadata.name}')
+          kubectl logs "$POD" > k8s-run-1-detailed.log
+          
+          # Prepare the file for run 2 by adding a header and the content
+          echo -e "Trip Comparison Log - K8S RUN #1 (${{ github.run_id }})\n" > combined-k8s-logs-${{ github.run_id }}.txt
+          echo "====================================================================================================" >> combined-k8s-logs-${{ github.run_id }}.txt
+          cat k8s-run-1-detailed.log >> combined-k8s-logs-${{ github.run_id }}.txt
+
+      - name: Upload Temporary K8s Artifacts for Run #2
+        uses: actions/upload-artifact@v4
+        with:
+          name: temp-k8s-run-1-log
+          path: combined-k8s-logs-${{ github.run_id }}.txt
+
+      - name: Delete KinD Cluster
+        if: always() 
+        run: kind delete cluster
+
+# --- JOB 2: Second K8s Execution (Finalizes Log and Emails) ---
+  k8s-run-2:
+    name: K8s Execution_2 #2 (Final Consolidation & Email)
+    runs-on: ubuntu-latest
+    needs: [build-and-push, k8s-run-1]
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      ## --- LOG CONSOLIDATION START ---
+      - name: Download First K8s Run Log
+        uses: actions/download-artifact@v4
+        with:
+          name: temp-k8s-run-1-log
+
+      - name: Set Log File Name ENV
+        run: |
+              echo "FINAL_LOG_NAME=combined-k8s-logs-19528409856.txt" >> $GITHUB_ENV
+              echo "FINAL_CSV_NAME=trip_a_generated_K8S_RUN2.csv" >> $GITHUB_ENV
+              touch trip_a_generated_K8S_RUN2.csv
+
+      ## --- LOG CONSOLIDATION END ---
+
+      - name: Install KinD and Kubectl
+        run: |
           curl -LO "https://dl.k8s.io/release/$(curl -L -s https://dl.k8s.io/release/stable.txt)/bin/linux/amd64/kubectl"
           sudo install -o root -g root -m 0755 kubectl /usr/local/bin/kubectl
-          # Install KinD
           [ "$(uname -m)" = x86_64 ] && curl -Lo ./kind https://kind.sigs.k8s.io/dl/v0.20.0/kind-linux-amd64
           chmod +x ./kind
           sudo install ./kind /usr/local/bin/kind
           
-      - name: Create KinD Cluster 🏗️
+      - name: Create KinD Cluster (Run #2)
         run: kind create cluster
-          
-      - name: Pull Image and Load into KinD
+      
+      - name: Pull Image to Runner Docker Daemon (Run #2)
         run: |
           IMAGE=ghcr.io/${{ github.repository_owner }}/trip-simulation:latest
           docker pull "$IMAGE"
-          kind load docker-image "$IMAGE"
-      
-      # Substitute the placeholder in k8s/job.yaml with the actual owner name
-      - name: Prepare K8s Job YAML
-        run: |
-          sed -i "s|<YOUR_OWNER>|${{ github.repository_owner }}|g" k8s/job.yaml
 
-      - name: Apply Job YAML (Sequential Run)
+      - name: Load Docker Image into KinD (Run #2)
+        run: |
+          IMAGE=ghcr.io/${{ github.repository_owner }}/trip-simulation:latest
+          kind load docker-image "$IMAGE"
+
+      - name: Apply Job YAML (Run #2)
         run: kubectl apply -f k8s/job.yaml
 
-      - name: Wait for Job completion (Max 5 minutes)
-        run: kubectl wait --for=condition=complete --timeout=300s job/trip-simulation-job
+      - name: Wait for Job #2 completion
+        run: kubectl wait --for=condition=complete --timeout=120s job/trip-simulation-job || true
 
-      - name: Capture Final Consolidated Log 📝
+      - name: Capture and Append K8s Job logs (Run #2)
         run: |
-          FINAL_LOG_NAME="combined-sequential-log-${{ github.run_id }}.txt"
+          # Append a clear header for the second run
+          echo -e "\n\n=======================================================" >> ${{ env.FINAL_LOG_NAME }}
+          echo "--- LOGS FROM KUBERNETES JOB EXECUTION (K8S RUN #2 CONSOLE) ---" >> ${{ env.FINAL_LOG_NAME }}
+          echo "=======================================================\n" >> ${{ env.FINAL_LOG_NAME }}
+          
+          # Get the Pod name and append logs
           POD=$(kubectl get pods --selector=job-name=trip-simulation-job -o jsonpath='{.items[0].metadata.name}')
+          kubectl logs "$POD" >> ${{ env.FINAL_LOG_NAME }} || true
           
-          # Capture the full log from all containers (Init and Main)
-          echo -e "Sequential Simulation Log (Single Pod)\n" > "$FINAL_LOG_NAME"
-          echo "====================================================================================================" >> "$FINAL_LOG_NAME"
-          kubectl logs "$POD" --all-containers=true >> "$FINAL_LOG_NAME"
-          
-          # Placeholder CSV creation
-          FINAL_CSV_NAME="trip_a_generated_K8S_SEQUENTIAL.csv"
-          echo "FINAL_CSV_NAME=$FINAL_CSV_NAME" >> $GITHUB_ENV
-          touch "$FINAL_CSV_NAME"
-          
-      - name: Upload Final Combined Log and CSV
+      - name: Upload Final Combined K8s Log
         uses: actions/upload-artifact@v4
         with:
-          name: final-combined-log-${{ github.run_id }}
+          name: final-combined-k8s-log-${{ github.run_id }}
           path: |
             ${{ env.FINAL_LOG_NAME }}
             ${{ env.FINAL_CSV_NAME }}
@@ -128,26 +209,27 @@ jobs:
         uses: dawidd6/action-send-mail@v6
         if: always()
         with:
-          # Use your actual secrets
+          # --- IMPORTANT: USE GMAIL APP PASSWORD (secrets.MAIL_PASSWORD) ---
           server_address: smtp.gmail.com 
           server_port: 465
           secure: true
           username: ${{ secrets.MAIL_USERNAME }}
           password: ${{ secrets.MAIL_PASSWORD }}
           
-          subject: 'CI/CD Run ${{ github.run_id }} Complete: K8s Sequential Consistency Check'
+          subject: 'CI/CD Run ${{ github.run_id }} Complete: K8s Simulation Inconsistency Check'
           body: |
-            Workflow completed with two sequential runs inside a single Kubernetes Pod.
+            Workflow completed with two successive runs in the KinD cluster. 
             
-            Compare Run #1 (Init Container) and Run #2 (Main Container) in the attached log.
+            Compare the results in the attached log to assess environment consistency.
             
             Run URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
             
-          to: 'your-recipient@example.com' 
-          from: 'your-sender@example.com' 
+          to: 'recipient@example.com' # UPDATE THIS
+          from: 'sender@example.com'   # UPDATE THIS
           
           attachments: ${{ env.FINAL_LOG_NAME }}, ${{ env.FINAL_CSV_NAME }}
+         
           
-      - name: Delete KinD Cluster 🗑️
+      - name: Delete KinD Cluster (Run #2)
         if: always()
-        run: kind delete cluster || true
+        run: kind delete cluster
