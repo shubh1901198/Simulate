@@ -75,11 +75,18 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
+      # Use a dedicated step to ensure KinD is installed and functional
+      - name: Install KinD and Kubectl
+        run: |
+          curl -LO "https://dl.k8s.io/release/$(curl -L -s https://dl.k8s.io/release/stable.txt)/bin/linux/amd64/kubectl"
+          sudo install -o root -g root -m 0755 kubectl /usr/local/bin/kubectl
+          [ "$(uname -m)" = x86_64 ] && curl -Lo ./kind https://kind.sigs.k8s.io/dl/v0.20.0/kind-linux-amd64
+          chmod +x ./kind
+          sudo install ./kind /usr/local/bin/kind
+          
       - name: Create KinD Cluster
-        uses: helm/kind-action@v1.9.0 # Use a dedicated action for stability
-        with:
-          node_image: kindest/node:v1.28.0 # Example image, adjust as needed
-
+        run: kind create cluster
+        
       - name: Pull Image to Runner Docker Daemon
         run: |
           IMAGE=ghcr.io/${{ github.repository_owner }}/trip-simulation:latest
@@ -101,10 +108,12 @@ jobs:
         run: kubectl apply -f k8s/job.yaml
 
       - name: Wait for Job #1 completion
+        # Increased timeout to 5 minutes (300s) for reliability, same as last step.
         run: kubectl wait --for=condition=complete --timeout=300s job/trip-simulation-job
 
       - name: Capture Detailed K8s Log (Run #1) and Prepare Artifact
         run: |
+          # Use the 'complete' state of the job as a selector trigger
           POD=$(kubectl get pods --selector=job-name=trip-simulation-job -o jsonpath='{.items[0].metadata.name}')
           kubectl logs "$POD" > run1_k8s_output.log
           
@@ -119,7 +128,7 @@ jobs:
           name: temp-k8s-log
           path: intermediate_combined_log.txt
           
-      # The kind-action includes a cleanup step, but keeping the explicit delete as a safeguard
+      # Clean up the cluster explicitly
       - name: Delete KinD Cluster
         if: always() 
         run: kind delete cluster || true
@@ -152,11 +161,20 @@ jobs:
           echo "FINAL_CSV_NAME=$FINAL_CSV_NAME" >> $GITHUB_ENV
           
           # Move the downloaded log (from run #1) to its final file name
+          # This must be done from the subdirectory created by download-artifact
           mv temp-k8s-log/intermediate_combined_log.txt "$FINAL_LOG_NAME"
           
           # Create a placeholder CSV file for upload
           touch "$FINAL_CSV_NAME"
       ## --- LOG CONSOLIDATION END ---
+
+      - name: Install KinD and Kubectl (Run #2)
+        run: |
+          curl -LO "https://dl.k8s.io/release/$(curl -L -s https://dl.k8s.io/release/stable.txt)/bin/linux/amd64/kubectl"
+          sudo install -o root -g root -m 0755 kubectl /usr/local/bin/kubectl
+          [ "$(uname -m)" = x86_64 ] && curl -Lo ./kind https://kind.sigs.k8s.io/dl/v0.20.0/kind-linux-amd64
+          chmod +x ./kind
+          sudo install ./kind /usr/local/bin/kind
 
       - name: Log in to GHCR (Pull image step)
         uses: docker/login-action@v3
@@ -166,9 +184,7 @@ jobs:
           password: ${{ secrets.GITHUB_TOKEN }}
         
       - name: Create KinD Cluster (Run #2)
-        uses: helm/kind-action@v1.9.0
-        with:
-          node_image: kindest/node:v1.28.0
+        run: kind create cluster
 
       - name: Pull Image to Runner Docker Daemon (Run #2)
         run: |
