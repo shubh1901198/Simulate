@@ -153,10 +153,10 @@ jobs:
 
       - name: Set Log File Name ENV
         run: |
-          echo "FINAL_LOG_NAME=combined-k8s-logs-${{ github.run_id }}.txt" >> $GITHUB_ENV
-          # Using a dummy CSV for attachment to maintain structure/expectations if needed, but not populated by K8s runs
-          echo "FINAL_CSV_NAME=trip_a_generated_K8S_RUN2.csv" >> $GITHUB_ENV
-          touch ${{ env.FINAL_CSV_NAME }} 
+              echo "FINAL_LOG_NAME=combined-k8s-logs-19528409856.txt" >> $GITHUB_ENV
+              echo "FINAL_CSV_NAME=trip_a_generated_K8S_RUN2.csv" >> $GITHUB_ENV
+              touch trip_a_generated_K8S_RUN2.csv
+
       ## --- LOG CONSOLIDATION END ---
 
       - name: Install KinD and Kubectl
