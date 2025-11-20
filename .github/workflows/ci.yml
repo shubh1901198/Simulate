@@ -60,7 +60,7 @@ jobs:
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v2
       - name: Log in to GitHub Container Registry
-        uses: docker/login-action@v2
+        uses: docker/login-action@v3
         with:
           registry: ghcr.io
           username: ${{ github.actor }}
@@ -201,6 +201,7 @@ jobs:
 
       - name: Send Email with Artifacts 📧
         uses: dawidd6/action-send-mail@v6
+        if: always()
         with:
           # --- IMPORTANT: USE GMAIL APP PASSWORD (secrets.MAIL_PASSWORD) ---
           server_address: smtp.gmail.com 
@@ -221,7 +222,7 @@ jobs:
           from: 'sender@example.com'   # UPDATE THIS
           
           attachments: ${{ env.FINAL_LOG_NAME }}, ${{ env.FINAL_CSV_NAME }}
-          if: always()
+         
           
       - name: Delete KinD Cluster (Run #2)
         if: always()
