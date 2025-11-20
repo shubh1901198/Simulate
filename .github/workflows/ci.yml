@@ -68,14 +68,19 @@ jobs:
           registry: ghcr.io
           username: shubh1901198
           password: ${{ secrets.GHCR_PAT }}
-          
-      - name: Build and push image to GHCR
-        uses: docker/build-push-action@v4
+      
+      - name: Log in to GHCR
+        uses: docker/login-action@v3
         with:
-          push: true
-          tags: ghcr.io/${{ github.repository_owner }}/trip-simulation:latest
-          file: dockerfile
+          registry: ghcr.io
+          username: shubh1901198
+          password: ${{ secrets.GHCR_PAT }}
 
+      - name: Build and Push Docker Image
+        run: |
+          docker build -t ghcr.io/shubh1901198/trip-simulation:latest .
+          docker push ghcr.io/shubh1901198/trip-simulation:latest   
+    
 # --- JOB 1: First K8s Execution (Generates Detailed Log) ---
   k8s-run-1:
     name: K8s Execution_1 #1 (Detailed Log)
@@ -84,8 +89,7 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
-      
-      
+        
       - name: Log in to GHCR
         uses: docker/login-action@v3
         with:
