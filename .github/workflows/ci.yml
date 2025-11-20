@@ -74,7 +74,7 @@ jobs:
 
 # --- JOB 1: First K8s Execution (Generates Detailed Log) ---
   k8s-run-1:
-    name: K8s Execution #1 (Detailed Log)
+    name: K8s Execution_1 #1 (Detailed Log)
     runs-on: ubuntu-latest
     needs: build-and-push
     steps:
@@ -85,12 +85,10 @@ jobs:
         uses: docker/login-action@v3
         with:
           registry: ghcr.io
-          username: ${{ github.actor }} # Uses the temporary actor username
-          password: ${{ secrets.GITHUB_TOKEN }} # Uses the temporary, correctly-scoped token
-          # Keep other settings if desired, like:
-          logout: true 
-          # ecr: auto is irrelevant for GHCR, so it can be removed
-
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+          logout: true
+      
       - name: Create KinD Cluster
         run: kind create cluster
           
@@ -132,7 +130,7 @@ jobs:
 
 # --- JOB 2: Second K8s Execution (Finalizes Log and Emails) ---
   k8s-run-2:
-    name: K8s Execution #2 (Final Consolidation & Email)
+    name: K8s Execution_2 #2 (Final Consolidation & Email)
     runs-on: ubuntu-latest
     needs: [build-and-push, k8s-run-1]
     steps:
