@@ -175,11 +175,10 @@ jobs:
       - name: Send Email with Artifacts 📧
         uses: dawidd6/action-send-mail@v6
         with:
-          # Configure these server settings based on your email provider (e.g., Gmail, Outlook, SendGrid)
+         
           server_address: smtp.gmail.com 
           server_port: 465
           secure: true
-          # Use GitHub Secrets for secure credentials
           username: ${{ secrets.MAIL_USERNAME }}
           password: ${{ secrets.MAIL_PASSWORD }}
           
