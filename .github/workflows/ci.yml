@@ -37,13 +37,13 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
           
-      - name: Build and push image to GHCR
-        uses: docker/build-push-action@v4
-        with:
-          context: .
-          push: true
-          tags: ${{ env.IMAGE_NAME_FULL }}
-          file: dockerfile
+      - name: Pull Image and Load into KinD
+        run: |
+          IMAGE=ghcr.io/${{ github.repository_owner }}/trip-simulation:latest
+          docker pull "$IMAGE" 
+          
+          # Now load the image into the KinD cluster
+          kind load docker-image "$IMAGE"
 
       # --- 2. K8s SETUP AND EXECUTION ---
       
