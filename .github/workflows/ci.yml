@@ -97,23 +97,35 @@ jobs:
 
       # --- 3. LOG AND ARTIFACT RETRIEVAL ---
 
-      - name: Capture K8s Job logs
+      - name: Consolidate Logs and Retrieve Artifacts
+        # Combines K8s console logs, file-based comparison logs, and moves the CSV artifact.
         run: |
-          echo "--- KUBERNETES JOB EXECUTION LOGS (Pod Console) ---" > ${{ env.FINAL_LOG_NAME }}
-          POD=$(kubectl get pods --selector=job-name=trip-simulation-job -o jsonpath='{.items[0].metadata.name}')
-          kubectl logs "$POD" >> ${{ env.FINAL_LOG_NAME }}
+          LOG_FILE=${{ env.FINAL_LOG_NAME }}
           
-      - name: Retrieve CSV Artifact from Mounted Volume
-        # This step is now resilient to missing files.
-        run: |
+          # 1. Capture K8s Pod Console Logs (Base Log)
+          echo "--- KUBERNETES JOB EXECUTION LOGS (Pod Console) ---" > "$LOG_FILE"
+          POD=$(kubectl get pods --selector=job-name=trip-simulation-job -o jsonpath='{.items[0].metadata.name}')
+          kubectl logs "$POD" >> "$LOG_FILE" || echo "WARNING: Could not retrieve K8s Pod logs." >> "$LOG_FILE"
+          
+          # 2. Append trip_comparison.log from Mounted Volume
+          COMP_LOG_PATH=${{ github.workspace }}/k8s-artifacts/trip_comparison.log
+          echo -e "\n\n--- FILE-BASED COMPARISON LOG (trip_comparison.log) ---" >> "$LOG_FILE"
+          if [ -f "$COMP_LOG_PATH" ]; then
+            echo "trip_comparison.log found. Appending content."
+            cat "$COMP_LOG_PATH" >> "$LOG_FILE"
+          else
+            echo "WARNING: trip_comparison.log NOT FOUND in mounted volume. Check K8s Job execution." >> "$LOG_FILE"
+          fi
+          
+          # 3. Retrieve and Handle CSV Artifact
           ARTIFACT_PATH=${{ github.workspace }}/k8s-artifacts/trip_a_generated.csv
           if [ -f "$ARTIFACT_PATH" ]; then
             echo "CSV artifact found. Moving to final location."
             mv "$ARTIFACT_PATH" ${{ env.FINAL_CSV_NAME }}
           else
             echo "WARNING: CSV artifact 'trip_a_generated.csv' NOT FOUND in mounted volume!"
-            echo "Please check the K8s Job logs above for script execution errors."
-            # Create a placeholder file to ensure subsequent steps do not fail due to missing path
+            echo "Please check the K8s Job logs for script execution errors."
+            # Create a placeholder file
             echo "--- CSV artifact missing from K8s run. Check logs for script error ---" > ${{ env.FINAL_CSV_NAME }}
           fi
 
