@@ -27,6 +27,14 @@ spec:
             CSV_PATH="/mnt/artifacts/trip_a_generated.csv"
             LOG_PATH="/mnt/artifacts/trip_comparison.log"
             
+            # --- RUNTIME DIAGNOSTICS (NEW) ---
+            echo "Checking contents of working directory (/app):"
+            ls -l /app
+            
+            echo -e "\nChecking Python dependencies (e.g., pandas):"
+            # Attempt to import a common library like pandas. If it fails, set -e will trigger exit 1.
+            python -c "import pandas; print('Python dependencies check: SUCCESS')"
+            
             # --- Check Script Availability ---
             if [ ! -f simulate_trip_a.py ]; then
                 echo "FATAL ERROR: simulate_trip_a.py not found in working directory /app."
