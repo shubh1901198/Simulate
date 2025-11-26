@@ -27,7 +27,7 @@ spec:
             CSV_PATH="/mnt/artifacts/trip_a_generated.csv"
             LOG_PATH="/mnt/artifacts/trip_comparison.log"
             
-            # --- RUNTIME DIAGNOSTICS (NEW) ---
+            # --- RUNTIME DIAGNOSTICS ---
             echo "Checking contents of working directory (/app):"
             ls -l /app
             
@@ -45,16 +45,16 @@ spec:
                 exit 1
             fi
 
-            # 1. Run simulation
-            echo "Running simulate_trip_a.py, output to: $CSV_PATH"
-            # If this command fails or hangs, set -e will immediately stop the script and the Job should fail quickly.
-            python simulate_trip_a.py --output-path "$CSV_PATH"
+            # 1. Run simulation with a 30-second timeout (NEW)
+            echo "Running simulate_trip_a.py with 30s timeout, output to: $CSV_PATH"
+            # If the script hangs, 'timeout' will kill it (exit code 124), and 'set -e' will fail the Job fast.
+            timeout 30s python simulate_trip_a.py --output-path "$CSV_PATH"
             echo "simulate_trip_a.py completed successfully."
             
-            # 2. Run comparison. 
+            # 2. Run comparison with a 10-second timeout (NEW)
             echo -e "\n--- Running Trip Comparison Results ---\n" > "$LOG_PATH"
             # If this command fails, set -e will stop the script.
-            python compare_trips.py 2>&1 >> "$LOG_PATH"
+            timeout 10s python compare_trips.py 2>&1 >> "$LOG_PATH"
             
             # 3. Final Debugging Check
             echo -e "\n--- Contents of Mounted Artifacts Volume (/mnt/artifacts) ---\n"
