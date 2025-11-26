@@ -1,36 +1,91 @@
-
 apiVersion: batch/v1
 kind: Job
 metadata:
   name: trip-simulation-job
 spec:
-  backoffLimit: 0
   template:
     spec:
-      restartPolicy: Never
+      restartPolicy: OnFailure
       containers:
-        - name: trip-simulation
-          image: ghcr.io/shubh1901198/trip-simulation:latest
-          imagePullPolicy: IfNotPresent
-          command:
-            - sh
-            - -c
-            - |
-              echo "Starting Trip Simulation..."
-              python simulate_trip_a.py -o /mnt/artifacts/trip_a_generated.csv -n 10
-              echo "Trip A simulation completed."
-              # Optional: Generate comparison log
-              if [ -f /mnt/artifacts/trip_a_generated.csv ]; then
-                python compare_trips.py > /mnt/artifacts/trip_comparison.log
-                echo "Comparison log generated."
-              else
-                echo "CSV not found, skipping comparison."
-              fi
-          volumeMounts:
-            - name: artifacts
-              mountPath: /mnt/artifacts
+      - name: trip-simulation
+        # Use the image loaded into the KinD cluster
+        image: ghcr.io/${{ github.repository_owner }}/trip-simulation:latest 
+        
+        # Ensure the script is executed in /app (where code is usually placed)
+        workingDir: /app 
+        
+        # This command runs the simulation scripts and outputs all artifacts to the /mnt/artifacts volume
+        command: ["/bin/bash", "-c"]
+        args:
+          - |
+            # Exit immediately if a command exits with a non-zero status
+            set -e 
+            
+            echo "--- Starting Trip Simulation and Comparison within K8s Pod ---"
+            
+            # --- Artifact Paths ---
+            CSV_PATH="/mnt/artifacts/trip_a_generated.csv"
+            LOG_PATH="/mnt/artifacts/trip_comparison.log"
+            
+            # --- RUNTIME DIAGNOSTICS ---
+            echo "Checking contents of working directory (/app):"
+            ls -l /app
+            
+            echo -e "\nChecking Python dependencies (e.g., pandas):"
+            # Attempt to import a common library like pandas. If it fails, set -e will trigger exit 1.
+            python -c "import pandas; print('Python dependencies check: SUCCESS')"
+            
+            # --- Check Script Availability ---
+            if [ ! -f simulate_trip_a.py ]; then
+                echo "FATAL ERROR: simulate_trip_a.py not found in working directory /app."
+                exit 1
+            fi
+            if [ ! -f compare_trips.py ]; then
+                echo "FATAL ERROR: compare_trips.py not found in working directory /app."
+                exit 1
+            fi
+
+            # 1. Run simulation with a 30-second timeout
+            # We assume the script writes its file to the working directory (/app) if the path isn't fully honored.
+            echo "Running simulate_trip_a.py with 30s timeout..."
+            timeout 30s python simulate_trip_a.py --output-path "$CSV_PATH"
+            echo "simulate_trip_a.py completed successfully."
+            
+            # 2. Run comparison with a 10-second timeout
+            # Based on the logs, 'compare_trips.py' creates 'trip_comparison.log' itself, likely in /app.
+            echo -e "\n--- Running Trip Comparison Results ---\n"
+            timeout 10s python compare_trips.py
+            
+            # --- ARTIFACT COLLECTION (NEW CRUCIAL STEP) ---
+            echo -e "\n--- Moving artifacts from /app to mounted volume (/mnt/artifacts) ---\n"
+            
+            # Copy the CSV artifact: assuming it's generated either at /app/trip_a_generated.csv or $CSV_PATH
+            if [ -f "trip_a_generated.csv" ]; then
+                cp trip_a_generated.csv "$CSV_PATH"
+                echo "Copied trip_a_generated.csv from /app."
+            fi
+
+            # Copy the comparison log artifact: assuming it's generated at /app/trip_comparison.log
+            if [ -f "trip_comparison.log" ]; then
+                cp trip_comparison.log "$LOG_PATH"
+                echo "Copied trip_comparison.log from /app."
+            fi
+            
+            # 3. Final Debugging Check
+            echo -e "\n--- Contents of Mounted Artifacts Volume (/mnt/artifacts) ---\n"
+            ls -lR /mnt/artifacts
+            
+            echo -e "\n--- K8s Job Execution Complete ---"
+
+            # 4. Ensure shell exits gracefully (CRUCIAL FOR K8s COMPLETION)
+            exit 0 
+
+        volumeMounts:
+        - name: artifact-storage
+          mountPath: /mnt/artifacts
       volumes:
-        - name: artifacts
-          hostPath:
-            path: /mnt/artifacts
-            type: Directory
+      - name: artifact-storage
+        # This hostPath corresponds to the directory mounted in the KinD cluster definition
+        hostPath:
+          path: /mnt/artifacts
+          type: DirectoryOrCreate
