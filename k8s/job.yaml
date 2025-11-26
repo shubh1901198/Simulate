@@ -1,77 +1,36 @@
+
 apiVersion: batch/v1
 kind: Job
 metadata:
   name: trip-simulation-job
 spec:
+  backoffLimit: 0
   template:
     spec:
-      restartPolicy: OnFailure
+      restartPolicy: Never
       containers:
-      - name: trip-simulation
-        # Use the image loaded into the KinD cluster
-        image: ghcr.io/${{ github.repository_owner }}/trip-simulation:latest 
-        
-        # Ensure the script is executed in /app (where code is usually placed)
-        workingDir: /app 
-        
-        # This command runs the simulation scripts and outputs all artifacts to the /mnt/artifacts volume
-        command: ["/bin/bash", "-c"]
-        args:
-          - |
-            # Exit immediately if a command exits with a non-zero status
-            set -e 
-            
-            echo "--- Starting Trip Simulation and Comparison within K8s Pod ---"
-            
-            # --- Artifact Paths ---
-            CSV_PATH="/mnt/artifacts/trip_a_generated.csv"
-            LOG_PATH="/mnt/artifacts/trip_comparison.log"
-            
-            # --- RUNTIME DIAGNOSTICS ---
-            echo "Checking contents of working directory (/app):"
-            ls -l /app
-            
-            echo -e "\nChecking Python dependencies (e.g., pandas):"
-            # Attempt to import a common library like pandas. If it fails, set -e will trigger exit 1.
-            python -c "import pandas; print('Python dependencies check: SUCCESS')"
-            
-            # --- Check Script Availability ---
-            if [ ! -f simulate_trip_a.py ]; then
-                echo "FATAL ERROR: simulate_trip_a.py not found in working directory /app."
-                exit 1
-            fi
-            if [ ! -f compare_trips.py ]; then
-                echo "FATAL ERROR: compare_trips.py not found in working directory /app."
-                exit 1
-            fi
-
-            # 1. Run simulation with a 30-second timeout
-            echo "Running simulate_trip_a.py with 30s timeout, output to: $CSV_PATH"
-            # If the script hangs, 'timeout' will kill it (exit code 124), and 'set -e' will fail the Job fast.
-            timeout 30s python simulate_trip_a.py --output-path "$CSV_PATH"
-            echo "simulate_trip_a.py completed successfully."
-            
-            # 2. Run comparison and log to file (Optimized for clarity)
-            echo -e "\n--- Running Trip Comparison Results: Writing to $LOG_PATH ---\n" > "$LOG_PATH"
-            # If this command fails, set -e will stop the script. The 'timeout 10s' ensures it doesn't hang.
-            timeout 10s python compare_trips.py 2>&1 >> "$LOG_PATH"
-            
-            # 3. Final Debugging Check
-            echo -e "\n--- Contents of Mounted Artifacts Volume (/mnt/artifacts) ---\n"
-            ls -lR /mnt/artifacts
-            
-            echo -e "\n--- K8s Job Execution Complete ---"
-            echo "Artifacts were targeted for: $CSV_PATH and $LOG_PATH"
-
-            # 4. Ensure shell exits gracefully (CRUCIAL FOR K8s COMPLETION)
-            exit 0 
-
-        volumeMounts:
-        - name: artifact-storage
-          mountPath: /mnt/artifacts
+        - name: trip-simulation
+          image: ghcr.io/shubh1901198/trip-simulation:latest
+          imagePullPolicy: IfNotPresent
+          command:
+            - sh
+            - -c
+            - |
+              echo "Starting Trip Simulation..."
+              python simulate_trip_a.py -o /mnt/artifacts/trip_a_generated.csv -n 100
+              echo "Trip A simulation completed."
+              # Optional: Generate comparison log
+              if [ -f /mnt/artifacts/trip_a_generated.csv ]; then
+                python compare_trips.py > /mnt/artifacts/trip_comparison.log
+                echo "Comparison log generated."
+              else
+                echo "CSV not found, skipping comparison."
+              fi
+          volumeMounts:
+            - name: artifacts
+              mountPath: /mnt/artifacts
       volumes:
-      - name: artifact-storage
-        # This hostPath corresponds to the directory mounted in the KinD cluster definition
-        hostPath:
-          path: /mnt/artifacts
-          type: DirectoryOrCreate
+        - name: artifacts
+          hostPath:
+            path: /mnt/artifacts
+            type: Directory
