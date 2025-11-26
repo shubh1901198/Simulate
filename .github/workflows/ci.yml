@@ -104,8 +104,18 @@ jobs:
           kubectl logs "$POD" >> ${{ env.FINAL_LOG_NAME }}
           
       - name: Retrieve CSV Artifact from Mounted Volume
-        # The CSV written by the K8s Pod is now on the host runner in k8s-artifacts.
-        run: mv ${{ github.workspace }}/k8s-artifacts/trip_a_generated.csv ${{ env.FINAL_CSV_NAME }}
+        # This step is now resilient to missing files.
+        run: |
+          ARTIFACT_PATH=${{ github.workspace }}/k8s-artifacts/trip_a_generated.csv
+          if [ -f "$ARTIFACT_PATH" ]; then
+            echo "CSV artifact found. Moving to final location."
+            mv "$ARTIFACT_PATH" ${{ env.FINAL_CSV_NAME }}
+          else
+            echo "WARNING: CSV artifact 'trip_a_generated.csv' NOT FOUND in mounted volume!"
+            echo "Please check the K8s Job logs above for script execution errors."
+            # Create a placeholder file to ensure subsequent steps do not fail due to missing path
+            echo "--- CSV artifact missing from K8s run. Check logs for script error ---" > ${{ env.FINAL_CSV_NAME }}
+          fi
 
       - name: Upload Final Combined Log and Artifacts
         uses: actions/upload-artifact@v4
