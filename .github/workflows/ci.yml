@@ -95,6 +95,25 @@ jobs:
       - name: Wait for Job completion
         run: kubectl wait --for=condition=complete --timeout=60s job/trip-simulation-job
 
+      - name: Debug K8s Job on failure
+        if: failure()
+        run: |
+          echo "========= JOB DETAILS ========="
+          kubectl describe job trip-simulation-job || true
+
+          echo "========= POD LIST ========="
+          kubectl get pods -o wide || true
+
+          POD=$(kubectl get pods --selector=job-name=trip-simulation-job -o jsonpath='{.items[0].metadata.name}')
+          echo "Using Pod: $POD"
+
+          echo "========= POD DESCRIBE ========="
+          kubectl describe pod "$POD" || true
+
+          echo "========= POD LOGS ========="
+          kubectl logs "$POD" --all-containers || true
+
+
       # --- 3. LOG AND ARTIFACT RETRIEVAL ---
 
       - name: Consolidate Logs and Retrieve Artifacts
