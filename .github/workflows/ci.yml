@@ -178,3 +178,4 @@ jobs:
         to: "recipient@example.com"
         from: "sender@example.com"
         attachments: ${{ env.FINAL_LOG }}, ${{ env.FINAL_CSV }}
+        
