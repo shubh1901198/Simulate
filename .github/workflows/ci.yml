@@ -37,13 +37,19 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
           
-      - name: Build and push image to GHCR
+      - name: Build and load image locally (Fix for KinD)
+        # We use 'load: true' to ensure the image is available in the local Docker daemon,
+        # which is required for the 'kind load docker-image' step.
         uses: docker/build-push-action@v4
         with:
           context: .
-          push: true
+          load: true # <-- CHANGE: Build and load locally
           tags: ${{ env.IMAGE_NAME_FULL }}
           file: dockerfile
+
+      - name: Push image to GHCR
+        # We now use a separate step to push the image to the remote registry.
+        run: docker push ${{ env.IMAGE_NAME_FULL }}
 
       # --- 2. K8s SETUP AND EXECUTION ---
       
@@ -61,7 +67,6 @@ jobs:
           
       - name: Generate KinD Config
         # Create a temporary config file for KinD cluster creation.
-        # This is a safer way to handle multi-line YAML config in a shell script.
         run: |
           cat <<EOF > kind-config.yaml
           kind: Cluster
@@ -78,7 +83,7 @@ jobs:
         run: kind create cluster --config ./kind-config.yaml
           
       - name: Load Docker Image into KinD Cluster (Crucial Step)
-        # Load the image just built into the KinD node's Docker daemon so K8s can find it.
+        # This step now successfully finds the image in the local Docker daemon.
         run: kind load docker-image ${{ env.IMAGE_NAME_FULL }}
         
       - name: Verify KinD Cluster Access
