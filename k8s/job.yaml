@@ -18,18 +18,32 @@ spec:
         command: ["/bin/bash", "-c"]
         args:
           - |
+            # Exit immediately if a command exits with a non-zero status
+            set -e 
+            
             echo "--- Starting Trip Simulation and Comparison within K8s Pod ---"
             
             # --- Artifact Paths ---
             CSV_PATH="/mnt/artifacts/trip_a_generated.csv"
             LOG_PATH="/mnt/artifacts/trip_comparison.log"
             
+            # --- Check Script Availability ---
+            if [ ! -f simulate_trip_a.py ]; then
+                echo "FATAL ERROR: simulate_trip_a.py not found in working directory /app."
+                exit 1
+            fi
+            if [ ! -f compare_trips.py ]; then
+                echo "FATAL ERROR: compare_trips.py not found in working directory /app."
+                exit 1
+            fi
+
             # 1. Run simulation and check result
             echo "Running simulate_trip_a.py, output to: $CSV_PATH"
             python simulate_trip_a.py --output-path "$CSV_PATH"
             
             # Check exit status of the simulation script
             if [ $? -ne 0 ]; then
+                # This block will only be reached if set -e was temporarily disabled, but kept for explicit logging
                 echo "ERROR: simulate_trip_a.py failed (exit code $?). CSV will be missing."
             else
                 echo "simulate_trip_a.py completed successfully."
