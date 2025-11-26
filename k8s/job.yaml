@@ -28,9 +28,10 @@ spec:
 
               # Ensure the directory exists (in case container runs non-root)
               mkdir -p /mnt/artifacts || true
-
-              # RUN THE SIMULATION
-              python3 /app/trip_simulation.py > /mnt/artifacts/simulation_output.log 2>&1
+             echo "Running Python script..."
+             python3 /app/trip_simulation.py 2>&1 | tee /mnt/artifacts/simulation_output.log
+             EXIT_CODE=${PIPESTATUS[0]}
+            echo "Python exited with code: $EXIT_CODE"
 
               EXIT_CODE=$?
               echo "Simulation exit code: $EXIT_CODE"
