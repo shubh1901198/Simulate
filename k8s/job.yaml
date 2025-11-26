@@ -3,15 +3,54 @@ kind: Job
 metadata:
   name: trip-simulation-job
 spec:
-  backoffLimit: 2
   template:
-    metadata:
-      labels:
-        app: trip-simulation
     spec:
-      restartPolicy: Never
+      restartPolicy: OnFailure
       containers:
       - name: trip-simulation
-        # Use your image name / tag here. If testing locally with minikube/kind, see README.
-        image: shu1bham9/trip-simulation:latest
-        command: ["sh", "-c", "python simulate_trip_a.py && python compare_trips.py"]
+        # Use the image loaded into the KinD cluster
+        image: ghcr.io/${{ github.repository_owner }}/trip-simulation:latest 
+        
+        # Ensure the script is executed in /app (where code is usually placed)
+        workingDir: /app 
+        
+        # This command runs the simulation scripts and outputs all artifacts to the /mnt/artifacts volume
+        command: ["/bin/bash", "-c"]
+        args:
+          - |
+            echo "--- Starting Trip Simulation and Comparison within K8s Pod ---"
+            
+            # --- Artifact Paths ---
+            CSV_PATH="/mnt/artifacts/trip_a_generated.csv"
+            LOG_PATH="/mnt/artifacts/trip_comparison.log"
+            
+            # 1. Run simulation and check result
+            echo "Running simulate_trip_a.py, output to: $CSV_PATH"
+            python simulate_trip_a.py --output-path "$CSV_PATH"
+            
+            # Check exit status of the simulation script
+            if [ $? -ne 0 ]; then
+                echo "ERROR: simulate_trip_a.py failed (exit code $?). CSV will be missing."
+            else
+                echo "simulate_trip_a.py completed successfully."
+            fi
+            
+            # 2. Run comparison. 
+            echo -e "\n--- Running Trip Comparison Results ---\n" > "$LOG_PATH"
+            python compare_trips.py 2>&1 >> "$LOG_PATH"
+            
+            # 3. Final Debugging Check
+            echo -e "\n--- Contents of Mounted Artifacts Volume (/mnt/artifacts) ---\n"
+            ls -lR /mnt/artifacts
+            echo -e "\n--- K8s Job Execution Complete ---"
+            echo "Artifacts were targeted for: $CSV_PATH and $LOG_PATH"
+
+        volumeMounts:
+        - name: artifact-storage
+          mountPath: /mnt/artifacts
+      volumes:
+      - name: artifact-storage
+        # This hostPath corresponds to the directory mounted in the KinD cluster definition
+        hostPath:
+          path: /mnt/artifacts
+          type: DirectoryOrCreate
