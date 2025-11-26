@@ -93,7 +93,7 @@ jobs:
         run: kubectl apply -f k8s/job.yaml
 
       - name: Wait for Job completion
-        run: kubectl wait --for=condition=complete --timeout=120s job/trip-simulation-job
+        run: kubectl wait --for=condition=complete --timeout=60s job/trip-simulation-job
 
       # --- 3. LOG AND ARTIFACT RETRIEVAL ---
 
