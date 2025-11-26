@@ -17,7 +17,7 @@ spec:
             - -c
             - |
               echo "Starting Trip Simulation..."
-              python simulate_trip_a.py -o /mnt/artifacts/trip_a_generated.csv -n 100
+              python simulate_trip_a.py -o /mnt/artifacts/trip_a_generated.csv -n 10
               echo "Trip A simulation completed."
               # Optional: Generate comparison log
               if [ -f /mnt/artifacts/trip_a_generated.csv ]; then
