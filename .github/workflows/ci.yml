@@ -37,13 +37,13 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
           
-      - name: Pull Image and Load into KinD
-        run: |
-          IMAGE=ghcr.io/${{ github.repository_owner }}/trip-simulation:latest
-          docker pull "$IMAGE" 
-          
-          # Now load the image into the KinD cluster
-          kind load docker-image "$IMAGE"
+      - name: Build and push image to GHCR
+        uses: docker/build-push-action@v4
+        with:
+          context: .
+          push: true
+          tags: ${{ env.IMAGE_NAME_FULL }}
+          file: dockerfile
 
       # --- 2. K8s SETUP AND EXECUTION ---
       
@@ -59,10 +59,11 @@ jobs:
           chmod +x ./kind
           sudo install ./kind /usr/local/bin/kind
           
-      - name: Create KinD Cluster and Expose Volume
-        # This config exposes the k8s-artifacts directory to the cluster node
+      - name: Generate KinD Config
+        # Create a temporary config file for KinD cluster creation.
+        # This is a safer way to handle multi-line YAML config in a shell script.
         run: |
-          kind create cluster --config - <<EOF
+          cat <<EOF > kind-config.yaml
           kind: Cluster
           apiVersion: kind.x-k8s.io/v1alpha4
           nodes:
@@ -71,6 +72,10 @@ jobs:
             - hostPath: ${{ github.workspace }}/k8s-artifacts
               containerPath: /mnt/artifacts
           EOF
+
+      - name: Create KinD Cluster
+        # Use the generated config file
+        run: kind create cluster --config ./kind-config.yaml
           
       - name: Load Docker Image into KinD Cluster (Crucial Step)
         # Load the image just built into the KinD node's Docker daemon so K8s can find it.
