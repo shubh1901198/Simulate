@@ -37,27 +37,26 @@ spec:
                 exit 1
             fi
 
-            # 1. Run simulation and check result
+            # 1. Run simulation
             echo "Running simulate_trip_a.py, output to: $CSV_PATH"
+            # If this command fails or hangs, set -e will immediately stop the script and the Job should fail quickly.
             python simulate_trip_a.py --output-path "$CSV_PATH"
-            
-            # Check exit status of the simulation script
-            if [ $? -ne 0 ]; then
-                # This block will only be reached if set -e was temporarily disabled, but kept for explicit logging
-                echo "ERROR: simulate_trip_a.py failed (exit code $?). CSV will be missing."
-            else
-                echo "simulate_trip_a.py completed successfully."
-            fi
+            echo "simulate_trip_a.py completed successfully."
             
             # 2. Run comparison. 
             echo -e "\n--- Running Trip Comparison Results ---\n" > "$LOG_PATH"
+            # If this command fails, set -e will stop the script.
             python compare_trips.py 2>&1 >> "$LOG_PATH"
             
             # 3. Final Debugging Check
             echo -e "\n--- Contents of Mounted Artifacts Volume (/mnt/artifacts) ---\n"
             ls -lR /mnt/artifacts
+            
             echo -e "\n--- K8s Job Execution Complete ---"
             echo "Artifacts were targeted for: $CSV_PATH and $LOG_PATH"
+
+            # 4. Ensure shell exits gracefully (CRUCIAL FOR K8s COMPLETION)
+            exit 0 
 
         volumeMounts:
         - name: artifact-storage
