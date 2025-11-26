@@ -9,7 +9,7 @@ spec:
       containers:
       - name: trip-simulation
         image: ghcr.io/shubh1901198/trip-simulation:latest
-        command: ["python", "simulate_trip_a.py", "-o", "/data/trip_log.csv", "-n", "100"]
+        command: ["python", "simulate_trip_a.py", "-o", "/data/trip_log.csv", "-n", "10"]
         volumeMounts:
         - name: data-volume
           mountPath: /data
