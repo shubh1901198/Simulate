@@ -17,19 +17,11 @@ env:
 
 jobs:
   full-k8s-pipeline:
-    name: Build → Run Kubernetes Simulation → Collect Artifacts
     runs-on: ubuntu-latest
-
     steps:
-    # -----------------------------
-    # 1. CHECKOUT
-    # -----------------------------
     - name: Checkout repository
       uses: actions/checkout@v4
 
-    # -----------------------------
-    # 2. BUILD DOCKER & PUSH
-    # -----------------------------
     - name: Set up QEMU
       uses: docker/setup-qemu-action@v2
 
@@ -51,12 +43,15 @@ jobs:
         load: true
         tags: ${{ env.IMAGE_NAME }}
 
-    - name: Push image to GHCR
+    - name: Push image to GHCR (GitHub Packages)
       run: docker push ${{ env.IMAGE_NAME }}
 
-    # -----------------------------
-    # 3. K8S CLUSTER SETUP (KinD)
-    # -----------------------------
+    - name: Tag image with commit SHA
+      run: |
+        VERSION=${{ github.sha }}
+        docker tag ${{ env.IMAGE_NAME }} ghcr.io/${{ github.repository_owner }}/trip-simulation:${VERSION}
+        docker push ghcr.io/${{ github.repository_owner }}/trip-simulation:${VERSION}
+
     - name: Create Artifact Volume Directory
       run: mkdir -p ${{ env.ARTIFACT_DIR }}
 
@@ -64,7 +59,6 @@ jobs:
       run: |
         curl -LO "https://dl.k8s.io/release/$(curl -L -s https://dl.k8s.io/release/stable.txt)/bin/linux/amd64/kubectl"
         sudo install -o root -g root -m 0755 kubectl /usr/local/bin/kubectl
-
         curl -Lo kind https://kind.sigs.k8s.io/dl/v0.20.0/kind-linux-amd64
         chmod +x kind
         sudo mv kind /usr/local/bin/
@@ -90,61 +84,24 @@ jobs:
     - name: Verify KinD cluster ready
       run: kubectl wait --for=condition=Ready node/kind-control-plane --timeout=90s
 
-    # -----------------------------
-    # 4. APPLY K8S JOB
-    # -----------------------------
     - name: Apply Simulation Job
       run: kubectl apply -f k8s/job.yaml
 
     - name: Wait for Job completion
       run: kubectl wait --for=condition=complete --timeout=600s job/trip-simulation-job
 
-    # -----------------------------
-    # 5. AUTO-DEBUG ON FAILURE
-    # -----------------------------
-    - name: Debug Kubernetes Job (on failure)
-      if: failure()
-      run: |
-        echo "=== JOB DESCRIBE ==="
-        kubectl describe job trip-simulation-job || true
-
-        echo "=== POD LIST ==="
-        kubectl get pods -o wide || true
-
-        POD=$(kubectl get pods --selector=job-name=trip-simulation-job -o jsonpath='{.items[0].metadata.name}')
-        echo "Using Pod: $POD"
-
-        echo "=== POD DESCRIBE ==="
-        kubectl describe pod "$POD" || true
-
-        echo "=== POD LOGS ==="
-        kubectl logs "$POD" --all-containers || true
-
-    # -----------------------------
-    # 6. COLLECT ARTIFACTS
-    # -----------------------------
     - name: Collect artifacts from container
       run: |
         LOG=${{ env.FINAL_LOG }}
-
         POD=$(kubectl get pods --selector=job-name=trip-simulation-job -o jsonpath='{.items[0].metadata.name}')
-
         echo "--- KUBERNETES POD LOGS ---" > "$LOG"
         kubectl logs "$POD" --all-containers >> "$LOG" || echo "No pod logs." >> "$LOG"
-
-        # Trip comparison log
         if [ -f "${{ env.ARTIFACT_DIR }}/trip_comparison.log" ]; then
           echo -e "\n--- TRIP COMPARISON LOG ---\n" >> "$LOG"
           cat "${{ env.ARTIFACT_DIR }}/trip_comparison.log" >> "$LOG"
-        else
-          echo "trip_comparison.log missing!" >> "$LOG"
         fi
-
-        # Trip A CSV
         if [ -f "${{ env.ARTIFACT_DIR }}/trip_a_generated.csv" ]; then
           mv "${{ env.ARTIFACT_DIR }}/trip_a_generated.csv" "${{ env.FINAL_CSV }}"
-        else
-          echo "CSV missing!" >> "${{ env.FINAL_CSV }}"
         fi
 
     - name: Upload final logs and CSV
@@ -155,9 +112,6 @@ jobs:
           ${{ env.FINAL_LOG }}
           ${{ env.FINAL_CSV }}
 
-    # -----------------------------
-    # 7. EMAIL NOTIFICATION
-    # -----------------------------
     - name: Send email with artifacts
       uses: dawidd6/action-send-mail@v6
       if: always()
@@ -167,15 +121,11 @@ jobs:
         secure: true
         username: ${{ secrets.MAIL_USERNAME }}
         password: ${{ secrets.MAIL_PASSWORD }}
-
         subject: "K8s Trip Simulation Completed (Run ${{ github.run_id }})"
         body: |
           Your Kubernetes Trip Simulation Job has finished.
-
           Logs and CSV are attached.
           Run URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
-
         to: "recipient@example.com"
         from: "sender@example.com"
         attachments: ${{ env.FINAL_LOG }}, ${{ env.FINAL_CSV }}
-        
