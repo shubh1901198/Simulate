@@ -242,6 +242,5 @@ def main():
     print(f"📝 Detailed log saved to: {args.log}\n")
 
 
-
 if __name__ == "__main__":
     main()  
