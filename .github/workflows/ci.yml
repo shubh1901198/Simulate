@@ -5,29 +5,43 @@ on:
     branches: [ main ]
   workflow_dispatch:
 
+# Required permissions to read repo code
+# and WRITE container packages to GHCR
 permissions:
   contents: read
   packages: write
 
 env:
+  # GHCR image name (GitHub Container Registry)
+  # This is where the Docker image (package) is stored
   IMAGE_NAME: ghcr.io/${{ github.repository_owner }}/trip-simulation:latest
+
+  # Directory shared between GitHub runner and KinD node
   ARTIFACT_DIR: ${{ github.workspace }}/k8s-artifacts
+
+  # Final output artifacts
   FINAL_LOG: final-k8s-simulation-log.txt
   FINAL_CSV: final-k8s-simulation-data.csv
 
 jobs:
   full-k8s-pipeline:
     runs-on: ubuntu-latest
+
     steps:
+    # Checkout source code from GitHub repository
     - name: Checkout repository
       uses: actions/checkout@v4
 
+    # Enable multi-architecture builds (best practice)
     - name: Set up QEMU
       uses: docker/setup-qemu-action@v2
 
+    # Docker Buildx enables advanced Docker builds
     - name: Set up Docker Buildx
       uses: docker/setup-buildx-action@v2
 
+    # Login to GHCR using GitHub-native authentication
+    # No external credentials needed
     - name: Log in to GHCR
       uses: docker/login-action@v2
       with:
@@ -35,6 +49,8 @@ jobs:
         username: ${{ github.actor }}
         password: ${{ secrets.GITHUB_TOKEN }}
 
+    # Build Docker image and load it locally
+    # Needed so KinD can run it without pulling
     - name: Build image and load locally for KinD
       uses: docker/build-push-action@v4
       with:
@@ -43,18 +59,24 @@ jobs:
         load: true
         tags: ${{ env.IMAGE_NAME }}
 
+    # Push image to GHCR
+    # THIS STEP CREATES THE CONTAINER PACKAGE
     - name: Push image to GHCR (GitHub Packages)
       run: docker push ${{ env.IMAGE_NAME }}
 
+    # Tag image with commit SHA for versioning
+    # Creates another version of the same GHCR package
     - name: Tag image with commit SHA
       run: |
         VERSION=${{ github.sha }}
         docker tag ${{ env.IMAGE_NAME }} ghcr.io/${{ github.repository_owner }}/trip-simulation:${VERSION}
         docker push ghcr.io/${{ github.repository_owner }}/trip-simulation:${VERSION}
 
+    # Create directory for simulation outputs
     - name: Create Artifact Volume Directory
       run: mkdir -p ${{ env.ARTIFACT_DIR }}
 
+    # Install Kubernetes tools
     - name: Install KinD & kubectl
       run: |
         curl -LO "https://dl.k8s.io/release/$(curl -L -s https://dl.k8s.io/release/stable.txt)/bin/linux/amd64/kubectl"
@@ -63,6 +85,7 @@ jobs:
         chmod +x kind
         sudo mv kind /usr/local/bin/
 
+    # KinD config with volume mount for artifacts
     - name: Generate KinD Config
       run: |
         cat <<EOF > kind-config.yaml
@@ -75,21 +98,27 @@ jobs:
             containerPath: /mnt/artifacts
         EOF
 
+    # Create local Kubernetes cluster
     - name: Create KinD cluster
       run: kind create cluster --config kind-config.yaml
 
+    # Load GHCR-built image into KinD
     - name: Load image into KinD
       run: kind load docker-image ${{ env.IMAGE_NAME }}
 
+    # Ensure Kubernetes is ready
     - name: Verify KinD cluster ready
       run: kubectl wait --for=condition=Ready node/kind-control-plane --timeout=90s
 
+    # Run simulation as Kubernetes Job
     - name: Apply Simulation Job
       run: kubectl apply -f k8s/job.yaml
 
+    # Wait for job completion
     - name: Wait for Job completion
       run: kubectl wait --for=condition=complete --timeout=600s job/trip-simulation-job
 
+    # Collect logs and generated CSV from container
     - name: Collect artifacts from container
       run: |
         LOG=${{ env.FINAL_LOG }}
@@ -104,6 +133,7 @@ jobs:
           mv "${{ env.ARTIFACT_DIR }}/trip_a_generated.csv" "${{ env.FINAL_CSV }}"
         fi
 
+    # Upload reports as GitHub Action artifacts
     - name: Upload final logs and CSV
       uses: actions/upload-artifact@v4
       with:
@@ -112,6 +142,7 @@ jobs:
           ${{ env.FINAL_LOG }}
           ${{ env.FINAL_CSV }}
 
+    # Email final reports
     - name: Send email with artifacts
       uses: dawidd6/action-send-mail@v6
       if: always()
